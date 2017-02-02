@@ -1,0 +1,16 @@
+
+{% for profile in profiles %}
+<ul>
+	<il>{{ profile.token }}</il>
+	<il>Age: <b>{{ profile.age }}</b></il>
+	|
+	<il>Interests: {% for pr, v in profile_interests.items %}
+			{% if pr == profile.token %}
+				<b>{% for i in v %}
+					{{ i }}
+				{% endfor %}</b>
+			{% endif %}
+		{% endfor %}
+	</il>
+</ul>
+{% endfor %}
