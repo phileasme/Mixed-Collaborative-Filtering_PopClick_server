@@ -22,6 +22,7 @@ def create_profile(request):
                     age=received_json_data['age'], 
                     token=randToken(),
                     auth=randToken(),
+                    gender=received_json_data['gender'],
                     logtime=datetime.strptime(received_json_data['logtime'], r'%Y-%m-%d %H:%M'))
             new_profile.save()
             for interest in received_json_data['interests']:
