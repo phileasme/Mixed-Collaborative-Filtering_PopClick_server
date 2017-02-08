@@ -13,9 +13,20 @@ def index(request):
     return HttpResponse("Hello, world. You're at the polls index.")
 
 @csrf_exempt
+def get_initial_auth(request, token):
+    if request.method == 'GET':
+        profile = Profile.objects.get(token=token)
+        if profile.activated == False:
+            context = { 'auth' : profile.auth }
+            profile.activated = True
+            profile.save()
+        else:
+            context = { 'auth' : '' }
+        return render(request, 'auth.json', context)
+
+@csrf_exempt
 def create_profile(request):
     if request.method == 'POST':
-        # data = request.POST
         received_json_data= json.loads( request.body.decode('utf-8') )
         if 'age' in received_json_data:
             new_profile = Profile(
