@@ -92,3 +92,12 @@ class PageInterest(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
         unique_together = ('page','interest',)
+
+class PageobjectInterest(models.Model):
+    pageobject = models.ForeignKey(Profile, on_delete=models.CASCADE)
+    interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
+    counter = models.IntegerField(default=1)
+    class Meta:
+        unique_together = ('pageobject','interest',)
+    def __str__(self):
+        return self.pageobject.href+' '+self.interest.name+' '+str(self.counter)

@@ -13,6 +13,23 @@ def index(request):
     return HttpResponse("Hello, world. You're at the polls index.")
 
 @csrf_exempt
+def populate_selectable(request, token):
+    if request.method == 'POST':
+        received_json_data= json.loads(request.body.decode('utf-8'))
+        profile = Profile.objects.get(token=token)
+        if profile.activated:
+            object_page = received_json_data['page'] #check for valid url
+            object_href = received_json_data['object_href']
+            object_text = received_json_data['object_text']
+            object_selectable = received_json_data['object_selectable']
+            logtime = received_json_data['logtime']
+
+            context = { '' : ''}
+        else:
+            context = { 'error' : 'not_activated'}
+        return render(request, 'auth.json', context)
+
+@csrf_exempt
 def get_initial_auth(request, token):
     if request.method == 'GET':
         profile = Profile.objects.get(token=token)
@@ -27,8 +44,9 @@ def get_initial_auth(request, token):
 @csrf_exempt
 def create_profile(request):
     if request.method == 'POST':
-        received_json_data= json.loads( request.body.decode('utf-8') )
+        received_json_data= json.loads(request.body.decode('utf-8'))
         if 'age' in received_json_data:
+            #Have to add a response if one of age, token, auth, gender, logtime is wrong
             new_profile = Profile(
                     age=received_json_data['age'], 
                     token=randToken(),
