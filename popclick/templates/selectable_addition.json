@@ -1,0 +1,5 @@
+{
+  "prof": "{{ prof }}",
+  "obj": "{{ obj }}",
+  "inter": "{{ inter }}"
+}

@@ -44,8 +44,11 @@ class PageObject(models.Model):
     href = models.CharField(max_length=2083)
     page = models.ForeignKey(Page, on_delete=models.CASCADE)
     text = models.CharField(max_length=3000)
+    clicks = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        unique_together = ('page','href','selector')
     def __str__(self):
         return self.page.href+" "+self.text
 
@@ -53,6 +56,7 @@ class ProfilePageobject(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     pageobject = models.ForeignKey(PageObject, on_delete=models.CASCADE)
     selections = models.IntegerField(default=0)
+    clicks = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
