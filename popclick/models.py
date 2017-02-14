@@ -44,7 +44,7 @@ class PageObject(models.Model):
     href = models.CharField(max_length=2083)
     page = models.ForeignKey(Page, on_delete=models.CASCADE)
     text = models.CharField(max_length=3000)
-    clicks = models.IntegerField(default=0)
+    selections = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
@@ -56,18 +56,19 @@ class ProfilePageobject(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     pageobject = models.ForeignKey(PageObject, on_delete=models.CASCADE)
     selections = models.IntegerField(default=0)
-    clicks = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
         unique_together = ('profile','pageobject',)
-        
-class PageobjectLog(models.Model):
+    def __str__(self):
+        return self.profile.token+" "+self.pageobject.text+" "+self.pageobject.href+" "+str(self.selections)
+class ProfilePageobjectLog(models.Model):
     profile_pageobject = models.ForeignKey(ProfilePageobject, on_delete=models.CASCADE)
-    time = models.DateTimeField(auto_now=True)
+    logtime = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    def __str__(self):
+        return str(self.logtime)
 class Visit(models.Model):
     page = models.ForeignKey(Page, on_delete=models.CASCADE)
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)

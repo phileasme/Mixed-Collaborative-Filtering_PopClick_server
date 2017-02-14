@@ -4,13 +4,52 @@ from django.http import HttpResponse
 import random
 from django.core import serializers
 from datetime import datetime
+from django.utils import timezone
 import requests
 import json
 from django.http import StreamingHttpResponse
-from .models import Profile, Interest, ProfileInterest
+from .models import Interest, Visit, Website, Page, Profile, ProfileInterest, PageObject, PageInterest, PageobjectInterest, ProfilePageobject, ProfilePageobjectLog 
 
 def index(request):
     return HttpResponse("Hello, world. You're at the polls index.")
+
+def handle_Website(host):
+    website, created = Website.objects.get_or_create(host=host)
+    return website
+
+def handle_Page(host, path, href):
+    website, created = Website.objects.get_or_create(host=host)
+    page = Page.objects.get_or_create(path=path, href=href, website=website)
+    return page
+
+def handle_PageObject(selector, href, page, text):
+    page = Page.objects.get(href=page)
+    pageobject, created = PageObject.objects.get_or_create(selector=selector, href=href, page=page)
+    pageobject.text = text
+    pageobject.selections += 1 
+    pageobject.save()
+    return pageobject
+
+def handle_Profile_PageObject(profile, pageobject):
+    new_profile_pageobject, created = ProfilePageobject.objects.get_or_create(profile=profile, pageobject=pageobject)
+    new_profile_pageobject.selections += 1
+    new_profile_pageobject.save()
+    return new_profile_pageobject
+
+def handle_Profile_PageobjectLog(profile_pageobject, logtime):
+    profile_pageobject_log = ProfilePageobjectLog(profile_pageobject=profile_pageobject, logtime=logtime)
+    profile_pageobject_log.save()
+
+def handle_visit(profile, page):
+    page = Page.objects.get(href=page)
+    visit, created = Visit.objects.get_or_create(profile=profile, page=page)
+    visit.counter += 1
+    visit.save()
+    return visit
+
+@csrf_exempt
+# def suggest_main(request, token):
+    
 
 @csrf_exempt
 def populate_selectable(request, token):
@@ -21,38 +60,28 @@ def populate_selectable(request, token):
         object_pageobject = received_json_data['pageobject']
         object_interaction = received_json_data['interaction']
         object_auth = object_profile[0]
-        object_logtime = object_profile[1]
+        object_logtime = datetime.strptime(object_profile[1], r'%Y-%m-%d %H:%M')
         profile = Profile.objects.get(token=token, auth=object_auth)
-        # context = { 'prof':object_profile, 'obj':object_pageobject, 'inter':object_interaction}
         if profile and profile.activated:
             object_website = object_pageobject[4]
             object_page_path = object_pageobject[5]
             object_page = object_pageobject[0]#check for valid url
             object_href = object_pageobject[1]
             object_text = object_pageobject[2]
-            object_selectable = object_pageobject[3]
+            object_selector = object_pageobject[3]
             object_operation =  object_interaction[0]
             object_clicks = object_interaction[1]
-
-            # context = { 'load' : 'active'}
+            handle_Website(object_website)
+            page = handle_Page(object_website, object_page_path, object_page)
+            pageobject = handle_PageObject(object_selector, object_href, object_page, object_text)
+            profile_pageobject = handle_Profile_PageObject(profile, pageobject)
+            handle_Profile_PageobjectLog(profile_pageobject, object_logtime)
+            handle_visit(profile, object_page)
             context = { 'prof':object_profile, 'obj':object_pageobject, 'inter':object_interaction}
-
         else:
             context = { 'error' : 'not_activated'}
         return render(request, 'selectable_addition.json', context)
-def handle_Website(host):
-    Website.objects.get_or_create(host=host)
-def handle_Page(host, path, href):
-    website = Website.objects.get_or_create(host=host)
-    page = Page.objects.get_or_create(path=path, href=href, website=website)
-def handle_PageObject(selector, href, page, text):
-    pageobject, created = PageObject.objects.get_or_create(selector=selector, href=href, page=page)
-    pageobject.text = text
-    if created:
-        pageobject.clicks = 1
-    else:
-        pageobject.clicks += 1 
-    pageobject.save()
+
 
 @csrf_exempt
 def get_initial_auth(request, token):
