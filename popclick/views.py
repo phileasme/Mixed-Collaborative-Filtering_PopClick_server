@@ -9,47 +9,73 @@ import requests
 import json
 from django.http import StreamingHttpResponse
 from .models import Interest, Visit, Website, Page, Profile, ProfileInterest, PageObject, PageInterest, PageobjectInterest, ProfilePageobject, ProfilePageobjectLog 
-
+from popclick.populate_suggestable import *
+from django.db.models import Max
+from numpy import *
+import numpy as np
 def index(request):
     return HttpResponse("Hello, world. You're at the polls index.")
 
-def handle_Website(host):
-    website, created = Website.objects.get_or_create(host=host)
-    return website
-
-def handle_Page(host, path, href):
-    website, created = Website.objects.get_or_create(host=host)
-    page = Page.objects.get_or_create(path=path, href=href, website=website)
-    return page
-
-def handle_PageObject(selector, href, page, text):
-    page = Page.objects.get(href=page)
-    pageobject, created = PageObject.objects.get_or_create(selector=selector, href=href, page=page)
-    pageobject.text = text
-    pageobject.selections += 1 
-    pageobject.save()
-    return pageobject
-
-def handle_Profile_PageObject(profile, pageobject):
-    new_profile_pageobject, created = ProfilePageobject.objects.get_or_create(profile=profile, pageobject=pageobject)
-    new_profile_pageobject.selections += 1
-    new_profile_pageobject.save()
-    return new_profile_pageobject
-
-def handle_Profile_PageobjectLog(profile_pageobject, logtime):
-    profile_pageobject_log = ProfilePageobjectLog(profile_pageobject=profile_pageobject, logtime=logtime)
-    profile_pageobject_log.save()
-
-def handle_visit(profile, page):
-    page = Page.objects.get(href=page)
-    visit, created = Visit.objects.get_or_create(profile=profile, page=page)
-    visit.counter += 1
-    visit.save()
-    return visit
-
 @csrf_exempt
-# def suggest_main(request, token):
-    
+def get_suggestion(request, token):
+    if request.method == 'POST':
+        received_json_data = json.loads(request.body.decode('utf-8'))
+
+        object_auth = received_json_data['profile']
+        # Array of page objects
+        profile = Profile.objects.get(token=token, auth=object_auth)
+        if profile and profile.activated:
+            pageobjects = received_json_data['pageobjects']
+            base_uri = pageobjects[0][0]
+            received_pageobjects_hrefs = [o[1] for o in pageobjects]
+            received_pageobjects_text = [o[2] for o in pageobjects]
+            received_pageobjects_selectors = [o[3] for o in pageobjects]
+            try:
+                page = Page.objects.get(href=base_uri)
+                matching_pageobjects = PageObject.objects.filter(page=page).filter(href__in=received_pageobjects_hrefs)
+                profiles_pageobjects = ProfilePageobject.objects.filter(pageobject__in=matching_pageobjects)
+                profiles = Profile.objects.filter(id__in=profiles_pageobjects.values('profile').distinct())
+                profiles_interests = ProfileInterest.objects.filter(profile__in=profiles)
+                # Normalized profile pageobject selection among profiles po.
+                nm_pg_select = {}
+                nm_pr_ages = {}
+                std_pr_int = {}
+                highest_age = profiles.aggregate(Max('age'))['age__max']
+                interests = []
+                for i in Interest.objects.all().order_by('name'):
+                    interests[len(interests):] = i.name
+                for profile in profiles :
+                    highest_nb_selections = profiles_pageobjects.filter(profile=profile).aggregate(Max('selections'))['selections__max']
+                    for pr_po in profiles_pageobjects.filter(profile=profile):
+                        nm_pg_select[str(pr_po.id)] = (pr_po.selections/int(highest_nb_selections))
+                    nm_pr_ages[str(profile.id)] = (profile.age/int(highest_age))
+                    pr_int_index = []
+                    pr_int = []
+                    for pi in profiles_interests.filter(profile=profile).values('interest'):
+                        for index, pi['interest'] in enumerate(Interest.objects.all().order_by('name')):
+                            pr_int_index[len(pr_int_index):] = index
+                    # Fill list with zero execpt at certain indices
+                
+
+
+
+
+
+
+                # indices = [i for i, s in enumerate(interests) if  in s]
+                #1 Prepare clicks -> Take clicks of each object / clicks of the object with highest amount
+                #2 Prepare interests -> Take all the existing interests | Place a 1 if that is one of the interests
+                #2 Array of interests, instanciate that list replace with zero if not in users interest else 1
+                #1 One simple column
+                #3 Gender similar to interests
+
+
+                # .values_list('profile', flat=True).distinct()
+                context = {'base': base_uri, 'obj': pr_int[0]['interest'] }
+            except Page.DoesNotExist:
+                context = {'base': base_uri, 'obj': "No known objects"}
+
+            return render(request, 'suggestions.json', context)
 
 @csrf_exempt
 def populate_selectable(request, token):
