@@ -14,6 +14,7 @@ from .models import Interest, Visit, Website, Page, Profile, ProfileInterest, Pa
 from popclick.populate_suggestable import *
 from django.db.models import Max
 from numpy import *
+from operator import itemgetter
 import numpy as np
 def index(request):
     return HttpResponse("Hello, world. You're at the polls index.")
@@ -25,8 +26,8 @@ def get_suggestion(request, token):
 
         object_auth = received_json_data['profile']
         # Array of page objects
-        profile = Profile.objects.get(token=token, auth=object_auth)
-        if profile and profile.activated:
+        own_profile = Profile.objects.get(token=token, auth=object_auth)
+        if own_profile and own_profile.activated:
             pageobjects = received_json_data['pageobjects']
             base_uri = pageobjects[0][0]
             received_pageobjects_hrefs = [o[1] for o in pageobjects]
@@ -41,6 +42,7 @@ def get_suggestion(request, token):
             try:
                 page = Page.objects.get(href=base_uri)
                 pageobjects = PageObject.objects.filter(page=page)
+                match_pageobjects = set(pageobjects)
                 matching_pageobjects = pageobjects.filter(href__in=received_pageobjects_hrefs)
                 matching_pageobjects_set = set(pageobjects.filter(href__in=received_pageobjects_hrefs))
                 # for index, mpb in enumerate(pageobjects):
@@ -87,7 +89,7 @@ def get_suggestion(request, token):
                 po_std_norm_interests_matrix = []
                 po_std_norm_gender_matrix = []
                 sss = matching_pageobjects.order_by('href').count()
-                ssd = [o.text for o in matching_pageobjects.order_by('href')]
+                ssd = [str(o.text) for o in matching_pageobjects.order_by('href')]
                 ordered_pageobjects = matching_pageobjects.order_by('href')
                 for po in matching_pageobjects.order_by('href'):
                     po_indexs.append(po)
@@ -114,33 +116,59 @@ def get_suggestion(request, token):
                     po_norm_select[po] = [pr_po_mn_select]
                     pr_po_mn_age /= po_l
                     po_norm_age[po] = [pr_po_mn_age]
+
+                complete_matrix = []
                 #  --- Next step
                 #  ----First : You concatenate lists (rows)
                 #  --- Second : You merge matrices 
                 #  Apply KNN comparing user profile. <-- Simple KNN not considering past user exterior page experience
-
                 postdnormintmtx = np.array(po_std_norm_interests_matrix)
                 postdnormgendmtx = np.array(po_std_norm_gender_matrix)
-
                 np.seterr(divide='ignore', invalid='ignore')
+                for po in matching_pageobjects.order_by('href'):
+                    complete_matrix.append(np.append(np.append(np.append(po_norm_age[po],postdnormintmtx[po_indexs.index(po)]),postdnormgendmtx[po_indexs.index(po)]),po_norm_select[po]))
+                # Euclidean distance calculation
+                # Matrix structure : age, interests , gender, selection
+                standardized_own_profile_gender = [0]*(len(genders))
+                standardized_own_profile_gender[genders.index(own_profile.gender)] = 1
+                prof_int = [pi['interest'] for pi in profiles_interests.filter(profile=own_profile).values('interest')]
+                prof_int_index = [interests.index(pri) for pri in prof_int]
+                standardized_own_profile_interests = [0]*(len(interests))
+                for it in prof_int_index:
+                    standardized_own_profile_interests[it] = 1
+                complete_matrix_averages = np.mean(complete_matrix, axis=0)
                 if len(po_std_norm_interests_matrix) != 0 and len(postdnormintmtx) != 0:
                     po_std_norm_interests_matrix = np.nan_to_num(postdnormintmtx / postdnormintmtx.max(axis=0))
-                    context = {'base': ssd, 'obj': sss, 'interests' : po_std_norm_interests_matrix }
-                else:
-                    context = {'base': base_uri, 'obj': sss, 'interests' : "no interest" }
+
                 if len(po_std_norm_gender_matrix) != 0 and len(postdnormgendmtx) != 0:
                     po_std_norm_gender_matrix = np.nan_to_num(postdnormgendmtx / postdnormgendmtx.max(axis=0))
-                    context = {'base': ssd, 'obj': sss, 'interests' : po_std_norm_gender_matrix }
-                else:
-                    context = {'base': base_uri, 'obj': sss, 'interests' : "no gender" }
+
+                own_porfile_properties = (np.append([(float(float(own_profile.age)/highest_age))], np.append(standardized_own_profile_interests, np.append(standardized_own_profile_gender,[1.0]))))  
+                complete_matrix = np.matrix(complete_matrix)
+                profile_po_distance = []
+                for rows in range(complete_matrix.shape[0]):
+                    current_row = 0
+                    for columns in range(complete_matrix.shape[1]):
+                        current_row += np.square(own_porfile_properties[columns]-complete_matrix.item(rows,columns))
+                    profile_po_distance.append((po_indexs[rows],(np.sqrt(current_row))))
+                profile_po_distance = sorted(profile_po_distance, key=itemgetter(1))
+                pro_po_d = []
+                for item in profile_po_distance:
+                    pro_po_d.append(received_pageobjects_hrefs.index(item[0].href))
+                # profile_match_distance = po_indexs
+
+                # # Gives the index of the element Matching its rank
+                # for ind, ele in profile_po_distance:
+                #     profile_match_distance[profile_po_distance_order.index(ele)] = po_indexs[ind]
 
                 # Just to print
-                context = {'base': ssd, 'obj': len(matching_pageobjects_set), 'interests' : matching_pageobjects_set }
+                context = {'base': ssd, 'recommendation': pro_po_d}
 
             except Page.DoesNotExist:
                 context = {'base': base_uri, 'obj': "No known objects"}
 
             return render(request, 'suggestions.json', context)
+# def KNN_regression()
 
 @csrf_exempt
 def populate_selectable(request, token):
