@@ -12,7 +12,7 @@ from django.db.models import Q
 from django.http import StreamingHttpResponse
 from .models import Interest, Visit, Website, Page, Profile, ProfileInterest, PageObject, PageInterest, PageobjectInterest, ProfilePageobject, ProfilePageobjectLog 
 from popclick.populate_suggestable import *
-from django.db.models import Max
+from django.db.models import Max, Min
 from numpy import *
 from operator import itemgetter
 import numpy as np
@@ -60,15 +60,20 @@ def get_suggestion(request, token):
                 nm_pr_ages = {}
                 std_pr_int = {}
                 std_gender = {}
+                lowest_age = profiles.aggregate(Min('age'))['age__min']
                 highest_age = profiles.aggregate(Max('age'))['age__max']
                 interests = [i.name for i in Interest.objects.all().order_by('name')]
-
+                if highest_age - lowest_age == 0:
+                    lowest_age = 0
                 genders = ['Female', 'Male', 'Other', 'Irrelevant']
                 for profile in profiles :
+                    lowest_nb_selections = profiles_pageobjects.filter(profile=profile).aggregate(Min('selections'))['selections__min']
                     highest_nb_selections = profiles_pageobjects.filter(profile=profile).aggregate(Max('selections'))['selections__max']
+                    if highest_nb_selections - lowest_nb_selections == 0:
+                        lowest_nb_selections = 0
                     for pr_po in profiles_pageobjects.filter(profile=profile):
-                        nm_pg_select[str(pr_po.id)] = (pr_po.selections/int(highest_nb_selections))
-                    nm_pr_ages[str(profile.id)] = (profile.age/int(highest_age))
+                        nm_pg_select[str(pr_po.id)] = (pr_po.selections-int(lowest_nb_selections))/(int(highest_nb_selections)-int(lowest_nb_selections))
+                    nm_pr_ages[str(profile.id)] = (profile.age-int(lowest_age))/(int(highest_age)-int(lowest_age))
                     
                     pr_int = [pi['interest'] for pi in profiles_interests.filter(profile=profile).values('interest')]
                     pr_int_index = [interests.index(pri) for pri in pr_int]
@@ -138,12 +143,12 @@ def get_suggestion(request, token):
                     standardized_own_profile_interests[it] = 1
                 complete_matrix_averages = np.mean(complete_matrix, axis=0)
                 if len(po_std_norm_interests_matrix) != 0 and len(postdnormintmtx) != 0:
-                    po_std_norm_interests_matrix = np.nan_to_num(postdnormintmtx / postdnormintmtx.max(axis=0))
+                    po_std_norm_interests_matrix = np.nan_to_num((postdnormintmtx-postdnormintmtx.min(axis=0)) / (postdnormintmtx.max(axis=0)-postdnormintmtx.min(axis=0)))
 
                 if len(po_std_norm_gender_matrix) != 0 and len(postdnormgendmtx) != 0:
-                    po_std_norm_gender_matrix = np.nan_to_num(postdnormgendmtx / postdnormgendmtx.max(axis=0))
+                    po_std_norm_gender_matrix = np.nan_to_num((postdnormgendmtx-postdnormgendmtx.min(axis=0)) / (postdnormgendmtx.max(axis=0)-postdnormgendmtx.min(axis=0)))
 
-                own_porfile_properties = (np.append([(float(float(own_profile.age)/highest_age))], np.append(standardized_own_profile_interests, np.append(standardized_own_profile_gender,[1.0]))))  
+                own_porfile_properties = (np.append([(float((float(own_profile.age)-lowest_age)/(highest_age-lowest_age)))], np.append(standardized_own_profile_interests, np.append(standardized_own_profile_gender,[1.0]))))  
                 complete_matrix = np.matrix(complete_matrix)
                 profile_po_distance = []
                 for rows in range(complete_matrix.shape[0]):
@@ -160,9 +165,12 @@ def get_suggestion(request, token):
                 # # Gives the index of the element Matching its rank
                 # for ind, ele in profile_po_distance:
                 #     profile_match_distance[profile_po_distance_order.index(ele)] = po_indexs[ind]
-
+                sent_recommendation = []
+                for i in pro_po_d:
+                    if i not in sent_recommendation:
+                        sent_recommendation.append(i)
                 # Just to print
-                context = {'base': ssd, 'recommendation': pro_po_d}
+                context = {'base': ssd, 'recommendation': sent_recommendation}
 
             except Page.DoesNotExist:
                 context = {'base': base_uri, 'obj': "No known objects"}
