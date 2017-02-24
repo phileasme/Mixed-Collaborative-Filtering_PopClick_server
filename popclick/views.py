@@ -2,7 +2,7 @@ from __future__ import division
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render
 from django.http import HttpResponse
-import random
+import random as rand
 from django.core import serializers
 from datetime import datetime
 from django.utils import timezone
@@ -45,12 +45,6 @@ def get_suggestion(request, token):
                 match_pageobjects = set(pageobjects)
                 matching_pageobjects = pageobjects.filter(href__in=received_pageobjects_hrefs)
                 matching_pageobjects_set = set(pageobjects.filter(href__in=received_pageobjects_hrefs))
-                # for index, mpb in enumerate(pageobjects):
-                #     try:
-                #         matching_pageobjects_set.add(pageobjects.get(text=received_pageobjects_text[index]))
-                #     except PageObject.DoesNotExist:
-                #         matching_pageobjects_set = matching_pageobjects_set
-
                 profiles_pageobjects = ProfilePageobject.objects.filter(pageobject__in=matching_pageobjects)
                 profiles = Profile.objects.filter(id__in=profiles_pageobjects.values('profile').distinct())
                 profiles_interests = ProfileInterest.objects.filter(profile__in=profiles)
@@ -63,6 +57,9 @@ def get_suggestion(request, token):
                 lowest_age = profiles.aggregate(Min('age'))['age__min']
                 highest_age = profiles.aggregate(Max('age'))['age__max']
                 interests = [i.name for i in Interest.objects.all().order_by('name')]
+                if highest_age is None:
+                    context = {'base': base_uri, 'obj': "No known objects"}
+                    return render(request, 'suggestions.json', context)
                 if highest_age - lowest_age == 0:
                     lowest_age = 0
                 genders = ['Female', 'Male', 'Other', 'Irrelevant']
@@ -123,12 +120,10 @@ def get_suggestion(request, token):
                     po_norm_age[po] = [pr_po_mn_age]
 
                 complete_matrix = []
-                #  --- Next step
-                #  ----First : You concatenate lists (rows)
-                #  --- Second : You merge matrices 
-                #  Apply KNN comparing user profile. <-- Simple KNN not considering past user exterior page experience
+
                 postdnormintmtx = np.array(po_std_norm_interests_matrix)
                 postdnormgendmtx = np.array(po_std_norm_gender_matrix)
+                
                 np.seterr(divide='ignore', invalid='ignore')
                 for po in matching_pageobjects.order_by('href'):
                     complete_matrix.append(np.append(np.append(np.append(po_norm_age[po],postdnormintmtx[po_indexs.index(po)]),postdnormgendmtx[po_indexs.index(po)]),po_norm_select[po]))
@@ -170,11 +165,12 @@ def get_suggestion(request, token):
                     if i not in sent_recommendation:
                         sent_recommendation.append(i)
                 # Just to print
-                context = {'base': ssd, 'recommendation': sent_recommendation}
+                context = {'base': ssd, 'recommendation': sent_recommendation, 'bob': highest_age, 'lowest': lowest_age}
 
-            except Page.DoesNotExist:
-                context = {'base': base_uri, 'obj': "No known objects"}
-
+            except (Page.DoesNotExist):
+                context = {'base': base_uri, 'recommendation': "No known objects"}
+            except KeyError as e:
+                context = {'base': base_uri, 'recommendation': "Cross matching issue"}
             return render(request, 'suggestions.json', context)
 # def KNN_regression()
 
@@ -266,4 +262,4 @@ def profiles(request):
 
 def randToken():
     a = '0123456789abcdefghijklmnopqrstuvxyzABCDEFGHIJKLMNOPQRSTUVXYZ'
-    return "".join([random.choice(a) for _ in range(20)])
+    return "".join([rand.choice(a) for _ in range(20)])
