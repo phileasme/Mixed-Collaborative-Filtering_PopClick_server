@@ -10,7 +10,8 @@ import requests
 import json
 from django.db.models import Q
 from django.http import StreamingHttpResponse
-from .models import Interest, Visit, Website, Page, Profile, ProfileInterest, PageObject, PageInterest, PageobjectInterest, ProfilePageobject, ProfilePageobjectLog 
+from django.db import IntegrityError
+from .models import Interest, Visit, Website, SecureAuth, Page, Profile, ProfileInterest, PageObject, PageInterest, PageobjectInterest, ProfilePageobject, ProfilePageobjectLog 
 from popclick.populate_suggestable import *
 from django.db.models import Max, Min
 from numpy import *
@@ -20,19 +21,42 @@ def index(request):
     return HttpResponse("Hello, world. You're at the polls index.")
 
 @csrf_exempt
+def viewkey(request, key):
+    own_profile = Profile.objects.get(token=key)
+    own_key = SecureAuth.objects.get(profile=own_profile)
+    if own_key:
+        context = {'recommendation': "Alive"+own_key.key}
+    else:
+        context = {'recommendation': "Dead"}
+    return render(request, 'viewkey.json', context)
+
+@csrf_exempt
+def keygen(request, key):
+    own_profile = Profile.objects.get(token=key)
+    own_key = SecureAuth(profile=own_profile, key=own_profile.auth)
+    own_key.save()
+    return HttpResponse("New Key generated")
+
+# Profile Based Collaborative filtering
+@csrf_exempt
 def get_suggestion(request, token):
     if request.method == 'POST':
+        # Loading Received information to a json format
         received_json_data = json.loads(request.body.decode('utf-8'))
-
         object_auth = received_json_data['profile']
         # Array of page objects
-        own_profile = Profile.objects.get(token=token, auth=object_auth)
-        if own_profile and own_profile.activated:
+        own_profile = Profile.objects.get(token=token)
+        own_key = SecureAuth.objects.get(profile=own_profile).key
+        if own_profile and own_profile.activated and own_key == str(object_auth):
             pageobjects = received_json_data['pageobjects']
-            base_uri = pageobjects[0][0]
-            received_pageobjects_hrefs = [o[1] for o in pageobjects]
-            received_pageobjects_text = [o[2] for o in pageobjects]
-            received_pageobjects_selectors = [o[3] for o in pageobjects]
+            try:
+                base_uri = pageobjects[0][0]
+                received_pageobjects_hrefs = [o[1] for o in pageobjects]
+                received_pageobjects_text = [o[2] for o in pageobjects]
+                received_pageobjects_selectors = [o[3] for o in pageobjects]
+            except IndexError:
+                context = {'base': "Current", 'recommendation': "None"}
+                return render(request, 'suggestions.json', context)
             # Analyze if selector is necessary : If url has a Hash character then it is
             # See if the text is meaningful : If there is Only one element with a text for a text then it is
             # Bug Fix : We don't get all the elements
@@ -57,7 +81,7 @@ def get_suggestion(request, token):
                 lowest_age = profiles.aggregate(Min('age'))['age__min']
                 highest_age = profiles.aggregate(Max('age'))['age__max']
                 interests = [i.name for i in Interest.objects.all().order_by('name')]
-                if highest_age is None:
+                if highest_age is None or lowest_age is None:
                     context = {'base': base_uri, 'obj': "No known objects"}
                     return render(request, 'suggestions.json', context)
                 if highest_age - lowest_age == 0:
@@ -70,6 +94,7 @@ def get_suggestion(request, token):
                         lowest_nb_selections = 0
                     for pr_po in profiles_pageobjects.filter(profile=profile):
                         nm_pg_select[str(pr_po.id)] = (pr_po.selections-int(lowest_nb_selections))/(int(highest_nb_selections)-int(lowest_nb_selections))
+                    # Should'nt be necessary
                     nm_pr_ages[str(profile.id)] = (profile.age-int(lowest_age))/(int(highest_age)-int(lowest_age))
                     
                     pr_int = [pi['interest'] for pi in profiles_interests.filter(profile=profile).values('interest')]
@@ -82,11 +107,8 @@ def get_suggestion(request, token):
                     standardized_profile_gender[genders.index(profile.gender)] = 1
                     std_gender[str(profile.id)] = [standardized_profile_gender]
                 po_indexs = []
-                # po_std_norm_interests = {}
                 po_norm_age = {}
-                # po_std_norm_gender = {}
                 po_norm_select = {}
-
                 # For each object obtain the average of each user profile choice
                 po_std_norm_interests_matrix = []
                 po_std_norm_gender_matrix = []
@@ -155,11 +177,8 @@ def get_suggestion(request, token):
                 pro_po_d = []
                 for item in profile_po_distance:
                     pro_po_d.append(received_pageobjects_hrefs.index(item[0].href))
-                # profile_match_distance = po_indexs
 
                 # # Gives the index of the element Matching its rank
-                # for ind, ele in profile_po_distance:
-                #     profile_match_distance[profile_po_distance_order.index(ele)] = po_indexs[ind]
                 sent_recommendation = []
                 for i in pro_po_d:
                     if i not in sent_recommendation:
@@ -175,17 +194,17 @@ def get_suggestion(request, token):
 # def KNN_regression()
 
 @csrf_exempt
+# Href unique constraint violation
 def populate_selectable(request, token):
     if request.method == 'POST':
         received_json_data = json.loads(request.body.decode('utf-8'))
-
         object_profile = received_json_data['profile']
         object_pageobject = received_json_data['pageobject']
         object_interaction = received_json_data['interaction']
         object_auth = object_profile[0]
         object_logtime = datetime.strptime(object_profile[1], r'%Y-%m-%d %H:%M')
-        profile = Profile.objects.get(token=token, auth=object_auth)
-        if profile and profile.activated:
+        profile = Profile.objects.get(token=token)
+        if profile and profile.activated and SecureAuth.objects.get(profile=profile).key == str(object_auth):
             object_website = object_pageobject[4]
             object_page_path = object_pageobject[5]
             object_page = object_pageobject[0]#check for valid url
@@ -213,8 +232,9 @@ def populate_selectable(request, token):
 def get_initial_auth(request, token):
     if request.method == 'GET':
         profile = Profile.objects.get(token=token)
+        secure_auth = SecureAuth.objects.get(profile=profile).key
         if profile.activated == False:
-            context = { 'auth' : profile.auth }
+            context = { 'auth' : secure_auth }
             profile.activated = True
             profile.save()
         else:
@@ -223,26 +243,66 @@ def get_initial_auth(request, token):
 
 @csrf_exempt
 def create_profile(request):
+    Interests = ['News & Media','Fashion','Tech','Finance & Economics','Music','Cars','Sports','Games & Tech','Shopping','Literature','Travel','Arts','Social Awareness','Science','Movies & Theatre','Craft']
     if request.method == 'POST':
+        # JSON decode error handling
         received_json_data= json.loads(request.body.decode('utf-8'))
-        if 'age' in received_json_data:
+        if profile_create_check(received_json_data, Interests) == "VALIDATED":
             #Have to add a response if one of age, token, auth, gender, logtime is wrong
+            private_k = randToken()
             new_profile = Profile(
-                    age=received_json_data['age'], 
+                    age=int(datetime.today().year)-int(received_json_data['age']), 
                     token=randToken(),
-                    auth=randToken(),
                     gender=received_json_data['gender'],
                     logtime=datetime.strptime(received_json_data['logtime'], r'%Y-%m-%d %H:%M'))
             new_profile.save()
+            new_secureauth = SecureAuth(profile=new_profile, key=private_k)
+            new_secureauth.save()
             for interest in received_json_data['interests']:
-                new_interest = Interest(name=interest)
-                new_interest.save()
-                new_profile_interest = ProfileInterest(profile=new_profile, interest=new_interest)
-                new_profile_interest.save()
+                if interest in Interests:
+                    new_interest = Interest(name=interest)
+                    new_interest.save()
+                    new_profile_interest = ProfileInterest(profile=new_profile, interest=new_interest)
+                    new_profile_interest.save()
                 #  Convert to json array : data['interests']
             context = { 'profile' : new_profile }
-            return render(request, 'create_profile.json', context)
-            
+        else:
+            context = { 'profile_error' : profile_create_check(received_json_data, Interests) }
+        return render(request, 'create_profile.json', context)
+
+# A profile must have a valid age, gender, logtime and at least 3 interests.
+def profile_create_check(json_object, Interests):
+    if {"age", "gender", "logtime", "interests"} <= json_object.keys():
+        if not(RepresentsInt(json_object['age']) and int(json_object['age']) > 3 and int(json_object['age']) < 120):
+            return "INVALID_AGE"
+        else:
+            if not str(json_object['gender']) in ["Male","Female","Other","Irrelevant"]:
+                return "INVALID_GENDER"
+            else:
+                # if datetime.strptime(received_json_data['logtime'], r'%Y-%m-%d %H:%M')
+                try:
+                    d = datetime.strptime(json_object['logtime'], r'%Y-%m-%d %H:%M')
+                    own_interests = 0
+                    for inter in json_object['interests']:
+                        if inter in Interests:
+                            own_interests+=1
+                    if not 3 <= own_interests < len(Interests):
+                        return own_interests
+                    else:
+                        return "VALIDATED"
+                except ValueError:
+                    return "WRONG_DATE_FORMAT"
+    else:
+        return "MISSING_ATTRIBUTE"
+
+# If the element can be represented as an integer
+def RepresentsInt(s):
+    try: 
+        int(s)
+        return True
+    except ValueError:
+        return False
+
 def profiles(request):
     profiles = Profile.objects.all()
     interests = Interest.objects.all()

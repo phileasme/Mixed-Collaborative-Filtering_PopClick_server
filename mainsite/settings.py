@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/dev/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/dev/ref/settings/
 """
-
+from mainsite.privates import *
 import os
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -19,6 +19,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/dev/howto/deployment/checklist/
 
+FERNET_KEYS = [
+    "b'dU67lGCoPdl8X-cThqNVseuQslyc47zDeAC8J3Lalx8='"
+]
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'a324$nlf!=n(o2+=sts(@+k2o%x06g@$le9sn-za=2+4rkzjd+'
 
@@ -44,7 +47,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 ]
-
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -75,7 +77,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'mainsite.wsgi.application'
-
 
 # Database
 # https://docs.djangoproject.com/en/dev/ref/settings/#databases

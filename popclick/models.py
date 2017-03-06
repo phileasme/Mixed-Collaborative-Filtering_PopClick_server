@@ -2,7 +2,9 @@ import datetime
 
 from django.db import models
 from django.utils import timezone
-# Create your models here.
+from fernet_fields import EncryptedTextField
+
+# Models are underneath
 
 class Interest(models.Model):
     name = models.CharField(max_length=200, primary_key=True)
@@ -12,7 +14,6 @@ class Interest(models.Model):
 class Profile(models.Model):
     age = models.IntegerField(default=0)
     token = models.CharField(unique=True, max_length=200)
-    auth = models.CharField(max_length=530)
     logtime = models.DateTimeField(auto_now=True)
     gender = models.CharField(max_length=20, default=None)
     interests = models.ManyToManyField(Interest, through='ProfileInterest')
@@ -21,6 +22,12 @@ class Profile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     def __str__(self):
         return self.token
+
+class SecureAuth(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
+    key = EncryptedTextField()
+    def __str__(self):
+        return self.key
 
 class Website(models.Model):
     host = models.CharField(unique=True, max_length=2083)

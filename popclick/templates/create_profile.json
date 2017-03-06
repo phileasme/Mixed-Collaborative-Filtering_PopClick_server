@@ -1,3 +1,9 @@
+{% if profile.token %}
 {
   "profile": "{{ profile.token }}"
+}	
+{% else %}
+{
+	"profile_error": "{{ profile_error }}"
 }
+{% endif %}
