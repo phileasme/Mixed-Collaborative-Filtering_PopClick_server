@@ -3,8 +3,12 @@ import datetime
 from django.db import models
 from django.utils import timezone
 from fernet_fields import EncryptedTextField
+from django_neomodel import DjangoNode
+from neomodel import (StructuredNode, StringProperty, IntegerProperty,
+    UniqueIdProperty, RelationshipTo, RelationshipFrom)# Models are underneath
+from neomodel import config as neoconfig
 
-# Models are underneath
+neoconfig.DATABASE_URL = 'bolt://admin:totalrecall@localhost:7687'
 
 class Interest(models.Model):
     name = models.CharField(max_length=200, primary_key=True)
@@ -113,3 +117,16 @@ class PageobjectInterest(models.Model):
         unique_together = ('pageobject','interest',)
     def __str__(self):
         return self.pageobject.href+' '+self.interest.name+' '+str(self.counter)
+
+class WebsiteN(StructuredNode):
+    host = StringProperty(unique_index=True, required=True)
+    pages = RelationshipFrom('PageN', 'IS_FROM')
+    profiles = RelationshipFrom('ProfileN', 'IS_FROM')
+class PageN(StructuredNode):
+    href = StringProperty(unique_index=True, required=True)
+    profiles = RelationshipFrom('ProfileN', 'IS_FROM')
+    website = RelationshipTo(WebsiteN, 'BELONGS_TO')
+class ProfileN(StructuredNode):
+    token = StringProperty(unique_index=True, required=True)
+    website = RelationshipTo(WebsiteN, 'HAS_A_WEBSITE')
+    page = RelationshipTo(PageN, 'HAS_A_PAGE')

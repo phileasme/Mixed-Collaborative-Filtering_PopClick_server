@@ -11,10 +11,15 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 """
 from mainsite.privates import *
 import os
-
+from neomodel import db
+from neomodel import config as neoconfig
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# NEOMODEL_NEO4J_BOLT_URL = os.environ.get('NEO4J_BOLT_URL', 'bolt://neo4j:test@localhost:7474')
 
+# NEOMODEL_NEO4J_BOLT_URL = 'bolt://admin:totalrecall@localhost:7687'
+# db.set_connection(NEOMODEL_NEO4J_BOLT_URL)
+neoconfig.DATABASE_URL = 'bolt://admin:totalrecall@localhost:7687'
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/dev/howto/deployment/checklist/
@@ -38,6 +43,7 @@ CORS_ORIGIN_WHITELIST = (
 # Application definition
 
 INSTALLED_APPS = [
+    'django_neomodel',
     'corsheaders',
     'popclick.apps.PopclickConfig',
     'django.contrib.admin',

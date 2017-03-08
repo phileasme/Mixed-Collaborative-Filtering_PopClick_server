@@ -1,12 +1,11 @@
 from .models import Interest, Visit, Website, Page, Profile, ProfileInterest, PageObject, PageInterest, PageobjectInterest, ProfilePageobject, ProfilePageobjectLog 
-
 def handle_Website(host):
     website, created = Website.objects.get_or_create(host=host)
     return website
 
 def handle_Page(host, path, href):
     website, created = Website.objects.get_or_create(host=host)
-    page = Page.objects.get_or_create(path=path, href=href, website=website)
+    page, cr = Page.objects.get_or_create(path=path, href=href, website=website)
     return page
 # Handle unique violation
 def handle_PageObject(selector, href, page, text):

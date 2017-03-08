@@ -12,11 +12,16 @@ from django.db.models import Q
 from django.http import StreamingHttpResponse
 from django.db import IntegrityError
 from .models import Interest, Visit, Website, SecureAuth, Page, Profile, ProfileInterest, PageObject, PageInterest, PageobjectInterest, ProfilePageobject, ProfilePageobjectLog 
+from neomodel import (StructuredNode, StringProperty, IntegerProperty,
+        RelationshipTo, RelationshipFrom)
+from .models import PageN, WebsiteN, ProfileN
 from popclick.populate_suggestable import *
 from django.db.models import Max, Min
 from numpy import *
 from operator import itemgetter
 import numpy as np
+from neomodel import db as neodb
+
 def index(request):
     return HttpResponse("Hello, world. You're at the polls index.")
 
@@ -220,6 +225,16 @@ def populate_selectable(request, token):
                 profile_pageobject = handle_Profile_PageObject(profile, pageobject)
                 handle_Profile_PageobjectLog(profile_pageobject, object_logtime)
                 handle_visit(profile, object_page)
+                with neodb.transaction:
+                    websiten = WebsiteN.get_or_create({'host': ''+object_website})
+                    pagen = PageN.get_or_create({'href': object_href})
+                    websiten = WebsiteN.nodes.get(host=object_website)
+                    pagen = PageN.nodes.get(href=object_href)
+                    pagen.website.connect(websiten)
+                    profilen = ProfileN.get_or_create({'token': ''+profile.token})
+                    profilen = ProfileN.nodes.get(token=token)
+                    profilen.page.connect(pagen)
+                    profilen.website.connect(websiten)
                 context = { 'prof':object_profile, 'obj':object_pageobject, 'inter':object_interaction}
             else:
                 context = { 'storing': 'not'}
@@ -237,6 +252,8 @@ def get_initial_auth(request, token):
             context = { 'auth' : secure_auth }
             profile.activated = True
             profile.save()
+            with neodb.transaction:
+                profilen = ProfileN.get_or_create({'token': ''+profile.token})
         else:
             context = { 'auth' : '' }
         return render(request, 'auth.json', context)
