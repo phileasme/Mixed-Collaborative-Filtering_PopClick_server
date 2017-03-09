@@ -21,9 +21,11 @@ from numpy import *
 from operator import itemgetter
 import numpy as np
 from neomodel import db as neodb
-
+# from py2neo import cypher
+from sklearn.preprocessing import normalize
+from neomodel import config as neoconfig
 def index(request):
-    return HttpResponse("Hello, world. You're at the polls index.")
+    return HttpResponse("Glad to check that the PopClick server is online.")
 
 @csrf_exempt
 def viewkey(request, key):
@@ -49,16 +51,20 @@ def get_suggestion(request, token):
         # Loading Received information to a json format
         received_json_data = json.loads(request.body.decode('utf-8'))
         object_auth = received_json_data['profile']
-        # Array of page objects
+        #  Getting profile information
         own_profile = Profile.objects.get(token=token)
         own_key = SecureAuth.objects.get(profile=own_profile).key
+        # Making sure the profile is activated and in order
         if own_profile and own_profile.activated and own_key == str(object_auth):
             pageobjects = received_json_data['pageobjects']
             try:
+                # Getting web page origin
                 base_uri = pageobjects[0][0]
+                # Extracting the received pageobjects
                 received_pageobjects_hrefs = [o[1] for o in pageobjects]
                 received_pageobjects_text = [o[2] for o in pageobjects]
                 received_pageobjects_selectors = [o[3] for o in pageobjects]
+            # Throw an Index Error if there is a missmatch.
             except IndexError:
                 context = {'base': "Current", 'recommendation': "None"}
                 return render(request, 'suggestions.json', context)
@@ -69,66 +75,92 @@ def get_suggestion(request, token):
             # QuerySets are bad at handling when we have many.
             # Limit the number of posted queries?
             try:
+                # Cross reference objects visible to the user and the objects stored
                 page = Page.objects.get(href=base_uri)
                 pageobjects = PageObject.objects.filter(page=page)
                 match_pageobjects = set(pageobjects)
-                # matching_pageobjects = pageobjects.filter(href__in=received_pageobjects_hrefs)
-                # matching_pageobjects_set = set(pageobjects.filter(href__in=received_pageobjects_hrefs))
-                matching_pageobjects = pageobjects.filter(text__in=received_pageobjects_text)
+                matching_pageobjects_set = set(pageobjects.filter(text__in=received_pageobjects_text).values_list('id', flat=True))
+                matching_pageobjects_set.update(pageobjects.filter(href__in=received_pageobjects_hrefs).values_list('id', flat=True))
+                matching_pageobjects = pageobjects.filter(pk__in=matching_pageobjects_set)
                 profiles_pageobjects = ProfilePageobject.objects.filter(pageobject__in=matching_pageobjects)
                 profiles = Profile.objects.filter(id__in=profiles_pageobjects.values('profile').distinct())
                 profiles_interests = ProfileInterest.objects.filter(profile__in=profiles)
-
+                selectable_values = []
                 # Normalized profile pageobject selection among profiles po.
+                # Dictionaries for the profile page selections, profile ages, Standardized profile interests, standardized genders
                 nm_pg_select = {}
                 nm_pr_ages = {}
                 std_pr_int = {}
                 std_gender = {}
+                # Find the oldest and youngest individuals
                 lowest_age = profiles.aggregate(Min('age'))['age__min']
                 highest_age = profiles.aggregate(Max('age'))['age__max']
+                # List of all the interests
                 interests = [i.name for i in Interest.objects.all().order_by('name')]
+                # If their are no records of ages
                 if highest_age is None or lowest_age is None:
                     context = {'base': base_uri, 'obj': "No known objects"}
                     return render(request, 'suggestions.json', context)
+                # If the database only hase one user we have to handle a small age difference.
                 if highest_age - lowest_age == 0:
-                    lowest_age = 0
+                    lowest_age = 2014
+                # The different types of genders
                 genders = ['Female', 'Male', 'Other', 'Irrelevant']
+
+                # Standardising profile based attributes : Gender, Interests | Normalising profile based attributes : Age, Selections
                 for profile in profiles :
+                    # Retrieving highest and lowest number of selections.
                     lowest_nb_selections = profiles_pageobjects.filter(profile=profile).aggregate(Min('selections'))['selections__min']
                     highest_nb_selections = profiles_pageobjects.filter(profile=profile).aggregate(Max('selections'))['selections__max']
-                    if highest_nb_selections - lowest_nb_selections == 0:
-                        lowest_nb_selections = 0
+                    if int(highest_nb_selections) - int(lowest_nb_selections) == 0:
+                        highest_nb_selections = highest_nb_selections + 1
+
+                    # Normalising selectable value per pageobject
                     for pr_po in profiles_pageobjects.filter(profile=profile):
-                        nm_pg_select[str(pr_po.id)] = (pr_po.selections-int(lowest_nb_selections))/(int(highest_nb_selections)-int(lowest_nb_selections))
+                        nm_pg_select[str(pr_po.id)] = float(pr_po.selections-int(lowest_nb_selections))/float(int(highest_nb_selections)-int(lowest_nb_selections))
+
                     # Should'nt be necessary
-                    nm_pr_ages[str(profile.id)] = (profile.age-int(lowest_age))/(int(highest_age)-int(lowest_age))
-                    
+                    nm_pr_ages[str(profile.id)] = float((profile.age-lowest_age)/(highest_age-lowest_age))
+                    # Retreiving the profile's interests
                     pr_int = [pi['interest'] for pi in profiles_interests.filter(profile=profile).values('interest')]
+                    # Index matching the interest location within the list of all known interests(alphabetically)
                     pr_int_index = [interests.index(pri) for pri in pr_int]
+
+                    # Array of zero's for a standardized
                     standardized_profile_interests = [0]*(len(interests))
+                    standardized_profile_gender = [0]*(len(genders))
+                    # Standardising the profile interests and gender creating two rows containing 0's and 1's
                     for it in pr_int_index:
                         standardized_profile_interests[it] = 1
-                    std_pr_int[str(profile.id)] = standardized_profile_interests
-                    standardized_profile_gender = [0]*(len(genders))
                     standardized_profile_gender[genders.index(profile.gender)] = 1
+
+                    # Add standardised list of profile interests to the dictionary of standardised interests
+                    std_pr_int[str(profile.id)] = standardized_profile_interests
+                    # Add standardised list of profile gender to the dictionary of standardised gender 
                     std_gender[str(profile.id)] = [standardized_profile_gender]
+                
+                # Ordered list of pageobjects
                 po_indexs = []
+                # Dictionary of normalised Age per profile per page object
                 po_norm_age = {}
+                #  Dictionary of normalised Selections per profile per page objects
                 po_norm_select = {}
                 # For each object obtain the average of each user profile choice
                 po_std_norm_interests_matrix = []
                 po_std_norm_gender_matrix = []
-                sss = matching_pageobjects.order_by('href').count()
-                ssd = [str(o.text) for o in matching_pageobjects.order_by('href')]
-                ordered_pageobjects = matching_pageobjects.order_by('href')
+                po_last_batch = []
                 for po in matching_pageobjects.order_by('href'):
+                    # Adding page object to the list to allow indexing
                     po_indexs.append(po)
-                    po_l = int(profiles_pageobjects.filter(pageobject=po).count())
+                    # Number of profiles who used the page object
+                    po_l = int(profiles_pageobjects.filter(pageobject=po).distinct().count())
+                    # Default values
                     pr_po_mn_select = 0
                     pr_po_mn_age = 0
                     pr_po_std_mn_interests = []
                     pr_po_std_mn_gender = []
-                    for pro in profiles_pageobjects.filter(pageobject=po).order_by('pageobject'):
+
+                    for pro in profiles_pageobjects.filter(pageobject=po):
                         pr_po_mn_select += float(nm_pg_select[str(pro.id)])
                         pr_po_mn_age += float(nm_pr_ages[str(pro.profile.id)])
                         if len(pr_po_std_mn_interests) == 0:
@@ -148,31 +180,27 @@ def get_suggestion(request, token):
                     po_norm_age[po] = [pr_po_mn_age]
 
                 complete_matrix = []
-
                 postdnormintmtx = np.array(po_std_norm_interests_matrix)
                 postdnormgendmtx = np.array(po_std_norm_gender_matrix)
-                
                 np.seterr(divide='ignore', invalid='ignore')
+
                 for po in matching_pageobjects.order_by('href'):
                     complete_matrix.append(np.append(np.append(np.append(po_norm_age[po],postdnormintmtx[po_indexs.index(po)]),postdnormgendmtx[po_indexs.index(po)]),po_norm_select[po]))
                 # Euclidean distance calculation
                 # Matrix structure : age, interests , gender, selection
+
+                # Individual Row
                 standardized_own_profile_gender = [0]*(len(genders))
+                standardized_own_profile_interests = [0]*(len(interests))
                 standardized_own_profile_gender[genders.index(own_profile.gender)] = 1
                 prof_int = [pi['interest'] for pi in profiles_interests.filter(profile=own_profile).values('interest')]
                 prof_int_index = [interests.index(pri) for pri in prof_int]
-                standardized_own_profile_interests = [0]*(len(interests))
                 for it in prof_int_index:
                     standardized_own_profile_interests[it] = 1
-                complete_matrix_averages = np.mean(complete_matrix, axis=0)
-                if len(po_std_norm_interests_matrix) != 0 and len(postdnormintmtx) != 0:
-                    po_std_norm_interests_matrix = np.nan_to_num((postdnormintmtx-postdnormintmtx.min(axis=0)) / (postdnormintmtx.max(axis=0)-postdnormintmtx.min(axis=0)))
 
-                if len(po_std_norm_gender_matrix) != 0 and len(postdnormgendmtx) != 0:
-                    po_std_norm_gender_matrix = np.nan_to_num((postdnormgendmtx-postdnormgendmtx.min(axis=0)) / (postdnormgendmtx.max(axis=0)-postdnormgendmtx.min(axis=0)))
-
-                own_porfile_properties = (np.append([(float((float(own_profile.age)-lowest_age)/(highest_age-lowest_age)))], np.append(standardized_own_profile_interests, np.append(standardized_own_profile_gender,[1.0]))))  
-                complete_matrix = np.matrix(complete_matrix)
+                own_porfile_properties = (np.append([float((profile.age-lowest_age)/(highest_age-lowest_age))], np.append(standardized_own_profile_interests, np.append(standardized_own_profile_gender,[1.0]))))  
+                # Normalize columns
+                complete_matrix = np.matrix(normalize(complete_matrix, axis=0, norm='l1'))
                 profile_po_distance = []
                 for rows in range(complete_matrix.shape[0]):
                     current_row = 0
@@ -182,15 +210,17 @@ def get_suggestion(request, token):
                 profile_po_distance = sorted(profile_po_distance, key=itemgetter(1))
                 pro_po_d = []
                 for item in profile_po_distance:
-                    # pro_po_d.append(received_pageobjects_hrefs.index(item[0].href))
-                    pro_po_d.append(received_pageobjects_text.index(item[0].text))
+                    if item[0].text in received_pageobjects_text:
+                        pro_po_d.append(received_pageobjects_text.index(item[0].text))
+                    else:
+                        pro_po_d.append(received_pageobjects_hrefs.index(item[0].href))
                 # # Gives the index of the element Matching its rank
                 sent_recommendation = []
                 for i in pro_po_d:
                     if i not in sent_recommendation:
                         sent_recommendation.append(i)
                 # Just to print
-                context = {'base': ssd, 'recommendation': sent_recommendation, 'bob': highest_age, 'lowest': lowest_age}
+                context = {'base': complete_matrix.tolist,'indexs': 'po_indexs', 'recommendation': sent_recommendation}
 
             except (Page.DoesNotExist):
                 context = {'base': base_uri, 'recommendation': "No known objects"}
