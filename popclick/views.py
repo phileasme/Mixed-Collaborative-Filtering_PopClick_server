@@ -72,8 +72,9 @@ def get_suggestion(request, token):
                 page = Page.objects.get(href=base_uri)
                 pageobjects = PageObject.objects.filter(page=page)
                 match_pageobjects = set(pageobjects)
-                matching_pageobjects = pageobjects.filter(href__in=received_pageobjects_hrefs)
-                matching_pageobjects_set = set(pageobjects.filter(href__in=received_pageobjects_hrefs))
+                # matching_pageobjects = pageobjects.filter(href__in=received_pageobjects_hrefs)
+                # matching_pageobjects_set = set(pageobjects.filter(href__in=received_pageobjects_hrefs))
+                matching_pageobjects = pageobjects.filter(text__in=received_pageobjects_text)
                 profiles_pageobjects = ProfilePageobject.objects.filter(pageobject__in=matching_pageobjects)
                 profiles = Profile.objects.filter(id__in=profiles_pageobjects.values('profile').distinct())
                 profiles_interests = ProfileInterest.objects.filter(profile__in=profiles)
@@ -181,8 +182,8 @@ def get_suggestion(request, token):
                 profile_po_distance = sorted(profile_po_distance, key=itemgetter(1))
                 pro_po_d = []
                 for item in profile_po_distance:
-                    pro_po_d.append(received_pageobjects_hrefs.index(item[0].href))
-
+                    # pro_po_d.append(received_pageobjects_hrefs.index(item[0].href))
+                    pro_po_d.append(received_pageobjects_text.index(item[0].text))
                 # # Gives the index of the element Matching its rank
                 sent_recommendation = []
                 for i in pro_po_d:
@@ -197,6 +198,8 @@ def get_suggestion(request, token):
                 context = {'base': base_uri, 'recommendation': "Cross matching issue"}
             return render(request, 'suggestions.json', context)
 # def KNN_regression()
+
+# def getTrend()
 
 @csrf_exempt
 # Href unique constraint violation
