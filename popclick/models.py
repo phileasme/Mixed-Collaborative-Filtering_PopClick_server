@@ -73,13 +73,15 @@ class ProfilePageobject(models.Model):
         unique_together = ('profile','pageobject',)
     def __str__(self):
         return self.profile.token+" "+self.pageobject.text+" "+self.pageobject.href+" "+str(self.selections)
-class ProfilePageobjectLog(models.Model):
-    profile_pageobject = models.ForeignKey(ProfilePageobject, on_delete=models.CASCADE)
-    logtime = models.DateTimeField(auto_now=True)
+
+class PageobjectLog(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
+    pageobject = models.ForeignKey(PageObject, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     def __str__(self):
-        return str(self.logtime)
+        return str(self.updated_at)
+
 class Visit(models.Model):
     page = models.ForeignKey(Page, on_delete=models.CASCADE)
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
@@ -100,23 +102,23 @@ class ProfileInterest(models.Model):
     def __str__(self):
         return self.profile.token+' '+self.interest.name+' '+str(self.level)
 
-class PageInterest(models.Model):
-    page = models.ForeignKey(Page, on_delete=models.CASCADE)
-    interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
-    counter = models.IntegerField(default=1)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    class Meta:
-        unique_together = ('page','interest',)
+# class PageInterest(models.Model):
+#     page = models.ForeignKey(Page, on_delete=models.CASCADE)
+#     interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
+#     counter = models.IntegerField(default=1)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+#     class Meta:
+#         unique_together = ('page','interest',)
 
-class PageobjectInterest(models.Model):
-    pageobject = models.ForeignKey(Profile, on_delete=models.CASCADE)
-    interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
-    counter = models.IntegerField(default=1)
-    class Meta:
-        unique_together = ('pageobject','interest',)
-    def __str__(self):
-        return self.pageobject.href+' '+self.interest.name+' '+str(self.counter)
+# class PageobjectInterest(models.Model):
+#     pageobject = models.ForeignKey(Profile, on_delete=models.CASCADE)
+#     interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
+#     counter = models.IntegerField(default=1)
+#     class Meta:
+#         unique_together = ('pageobject','interest',)
+#     def __str__(self):
+#         return self.pageobject.href+' '+self.interest.name+' '+str(self.counter)
 
 class WebsiteN(StructuredNode):
     host = StringProperty(unique_index=True, required=True)
@@ -130,3 +132,7 @@ class ProfileN(StructuredNode):
     token = StringProperty(unique_index=True, required=True)
     website = RelationshipTo(WebsiteN, 'HAS_A_WEBSITE')
     page = RelationshipTo(PageN, 'HAS_A_PAGE')
+    def get_tokens_from_common_Websites(self, page):
+        results, metadata =self.cypher('START u=node({self}) MATCH (u:ProfileN)-[e:HAS_A_WEBSITE]->(w:WebsiteN)<-[e2:HAS_A_WEBSITE]-(u2:ProfileN)-[r:HAS_A_PAGE]->(p:PageN {href:"'+page+'"})\n RETURN u2, count(w)\n ORDER BY count(w) LIMIT 25')
+        # results, metadata = self.cypher("START u=node({self}) MATCH (u:ProfileN)-[e:HAS_A_WEBSITE]->(w:WebsiteN)<-[e2:HAS_A_WEBSITE]-(u2:ProfileN)\n RETURN u2, count(w) ORDER BY count(w) LIMIT 25")
+        return [results]

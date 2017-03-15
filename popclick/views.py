@@ -11,7 +11,7 @@ import json
 from django.db.models import Q
 from django.http import StreamingHttpResponse
 from django.db import IntegrityError
-from .models import Interest, Visit, Website, SecureAuth, Page, Profile, ProfileInterest, PageObject, PageInterest, PageobjectInterest, ProfilePageobject, ProfilePageobjectLog 
+from .models import Interest, Visit, Website, SecureAuth, Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
 from neomodel import (StructuredNode, StringProperty, IntegerProperty,
         RelationshipTo, RelationshipFrom)
 from .models import PageN, WebsiteN, ProfileN
@@ -44,6 +44,9 @@ def keygen(request, key):
     own_key.save()
     return HttpResponse("New Key generated")
 
+# def remove_mistake(request, ):
+    # Already visited in the last 5 seconds
+
 # Profile Based Collaborative filtering
 @csrf_exempt
 def get_suggestion(request, token):
@@ -56,10 +59,16 @@ def get_suggestion(request, token):
         own_key = SecureAuth.objects.get(profile=own_profile).key
         # Making sure the profile is activated and in order
         if own_profile and own_profile.activated and own_key == str(object_auth):
+            # Check if the page was already visited by the suse in last 5 seconds
+            Visit.objects.filter(profile=own_profile).order_by('-id')[1]
+            # Get last visit of user
+            # Get last selected element of user lochref href
+
             pageobjects = received_json_data['pageobjects']
             try:
                 # Getting web page origin
                 base_uri = pageobjects[0][0]
+                handle_visit(own_profile, base_uri)
                 # Extracting the received pageobjects
                 received_pageobjects_hrefs = [o[1] for o in pageobjects]
                 received_pageobjects_text = [o[2] for o in pageobjects]
@@ -68,12 +77,6 @@ def get_suggestion(request, token):
             except IndexError:
                 context = {'base': "Current", 'recommendation': "None"}
                 return render(request, 'suggestions.json', context)
-            # Analyze if selector is necessary : If url has a Hash character then it is
-            # See if the text is meaningful : If there is Only one element with a text for a text then it is
-            # Bug Fix : We don't get all the elements
-            # Match href / href & text / text & selector
-            # QuerySets are bad at handling when we have many.
-            # Limit the number of posted queries?
             try:
                 # Cross reference objects visible to the user and the objects stored
                 page = Page.objects.get(href=base_uri)
@@ -119,7 +122,6 @@ def get_suggestion(request, token):
                     for pr_po in profiles_pageobjects.filter(profile=profile):
                         nm_pg_select[str(pr_po.id)] = float(pr_po.selections-int(lowest_nb_selections))/float(int(highest_nb_selections)-int(lowest_nb_selections))
 
-                    # Should'nt be necessary
                     nm_pr_ages[str(profile.id)] = float((profile.age-lowest_age)/(highest_age-lowest_age))
                     # Retreiving the profile's interests
                     pr_int = [pi['interest'] for pi in profiles_interests.filter(profile=profile).values('interest')]
@@ -145,10 +147,10 @@ def get_suggestion(request, token):
                 po_norm_age = {}
                 #  Dictionary of normalised Selections per profile per page objects
                 po_norm_select = {}
-                # For each object obtain the average of each user profile choice
+                # For each object obtain add each user profile interests or gender value
+                # (The matrix will be normalized)
                 po_std_norm_interests_matrix = []
                 po_std_norm_gender_matrix = []
-                po_last_batch = []
                 for po in matching_pageobjects.order_by('href'):
                     # Adding page object to the list to allow indexing
                     po_indexs.append(po)
@@ -159,10 +161,12 @@ def get_suggestion(request, token):
                     pr_po_mn_age = 0
                     pr_po_std_mn_interests = []
                     pr_po_std_mn_gender = []
-
+                    # For each profile mapped to an object
                     for pro in profiles_pageobjects.filter(pageobject=po):
+                        # Add the profile normalised selections and age of the object/Profile
                         pr_po_mn_select += float(nm_pg_select[str(pro.id)])
                         pr_po_mn_age += float(nm_pr_ages[str(pro.profile.id)])
+                        # Add to the array interest/gender array or initialise it
                         if len(pr_po_std_mn_interests) == 0:
                             pr_po_std_mn_interests = std_pr_int[str(pro.profile.id)]
                         else:
@@ -171,25 +175,27 @@ def get_suggestion(request, token):
                             pr_po_std_mn_gender = std_gender[str(pro.profile.id)]
                         else:
                             pr_po_std_mn_gender = np.add(pr_po_std_mn_gender, std_gender[str(pro.profile.id)])
+                    # Page object standardised to be normalised interest/gender matrix
                     po_std_norm_interests_matrix[len(po_std_norm_interests_matrix):] = [pr_po_std_mn_interests]
                     po_std_norm_gender_matrix[len(po_std_norm_gender_matrix):] = pr_po_std_mn_gender
-                    # Still have to transform this to a proper matrix
+                    # Normalise the selection and age prior
                     pr_po_mn_select /= po_l
                     po_norm_select[po] = [pr_po_mn_select]
                     pr_po_mn_age /= po_l
                     po_norm_age[po] = [pr_po_mn_age]
 
                 complete_matrix = []
+                # Convert to numpy array
                 postdnormintmtx = np.array(po_std_norm_interests_matrix)
                 postdnormgendmtx = np.array(po_std_norm_gender_matrix)
                 np.seterr(divide='ignore', invalid='ignore')
 
+                # Create the complete matrix
+                # Matrix structure : age, interests , gender, selection
                 for po in matching_pageobjects.order_by('href'):
                     complete_matrix.append(np.append(np.append(np.append(po_norm_age[po],postdnormintmtx[po_indexs.index(po)]),postdnormgendmtx[po_indexs.index(po)]),po_norm_select[po]))
-                # Euclidean distance calculation
-                # Matrix structure : age, interests , gender, selection
-
-                # Individual Row
+                
+                # Individual Row, Could be simplified to simply getting the actual user row in the matrix
                 standardized_own_profile_gender = [0]*(len(genders))
                 standardized_own_profile_interests = [0]*(len(interests))
                 standardized_own_profile_gender[genders.index(own_profile.gender)] = 1
@@ -197,30 +203,41 @@ def get_suggestion(request, token):
                 prof_int_index = [interests.index(pri) for pri in prof_int]
                 for it in prof_int_index:
                     standardized_own_profile_interests[it] = 1
-
                 own_porfile_properties = (np.append([float((profile.age-lowest_age)/(highest_age-lowest_age))], np.append(standardized_own_profile_interests, np.append(standardized_own_profile_gender,[1.0]))))  
+                
                 # Normalize columns
                 complete_matrix = np.matrix(normalize(complete_matrix, axis=0, norm='l1'))
+                # Euclidean distance calculation
                 profile_po_distance = []
                 for rows in range(complete_matrix.shape[0]):
                     current_row = 0
                     for columns in range(complete_matrix.shape[1]):
                         current_row += np.square(own_porfile_properties[columns]-complete_matrix.item(rows,columns))
                     profile_po_distance.append((po_indexs[rows],(np.sqrt(current_row))))
+                # Sorted list of distances
                 profile_po_distance = sorted(profile_po_distance, key=itemgetter(1))
                 pro_po_d = []
+                pro_po_t = []
+                pro_po_h = []
                 for item in profile_po_distance:
                     if item[0].text in received_pageobjects_text:
+                        # pro_po_t.append(item[0].text)
+                        # pro_po_d.append(0)
                         pro_po_d.append(received_pageobjects_text.index(item[0].text))
                     else:
+                        # pro_po_d.append(1)
+                        # pro_po_h.append(item[0].href)
                         pro_po_d.append(received_pageobjects_hrefs.index(item[0].href))
+
                 # # Gives the index of the element Matching its rank
                 sent_recommendation = []
                 for i in pro_po_d:
                     if i not in sent_recommendation:
                         sent_recommendation.append(i)
+                # obbb = len(ProfileN.nodes.get(token=token).get_tokens_from_common_Websites())
+
                 # Just to print
-                context = {'base': complete_matrix.tolist,'indexs': 'po_indexs', 'recommendation': sent_recommendation}
+                context = {'base': ProfileN.nodes.get(token=token).get_tokens_from_common_Websites(page=base_uri), 'recommendation_text': json.dumps(pro_po_t), 'recommendation_href':json.dumps(pro_po_h), 'recommendation':pro_po_d}
 
             except (Page.DoesNotExist):
                 context = {'base': base_uri, 'recommendation': "No known objects"}
@@ -230,6 +247,8 @@ def get_suggestion(request, token):
 # def KNN_regression()
 
 # def getTrend()
+# def user_user_recommendation:
+    
 
 @csrf_exempt
 # Href unique constraint violation
@@ -255,9 +274,9 @@ def populate_selectable(request, token):
                 handle_Website(object_website)
                 page = handle_Page(object_website, object_page_path, object_page)
                 pageobject = handle_PageObject(object_selector, object_href, object_page, object_text)
+                handle_visit(profile, page)
                 profile_pageobject = handle_Profile_PageObject(profile, pageobject)
-                handle_Profile_PageobjectLog(profile_pageobject, object_logtime)
-                handle_visit(profile, object_page)
+                handle_PageobjectLog(profile, pageobject)
                 with neodb.transaction:
                     websiten = WebsiteN.get_or_create({'host': ''+object_website})
                     pagen = PageN.get_or_create({'href': object_href})

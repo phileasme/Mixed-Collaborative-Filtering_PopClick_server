@@ -1,4 +1,4 @@
-from .models import Interest, Visit, Website, Page, Profile, ProfileInterest, PageObject, PageInterest, PageobjectInterest, ProfilePageobject, ProfilePageobjectLog 
+from .models import Interest, Visit, Website, Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
 def handle_Website(host):
     website, created = Website.objects.get_or_create(host=host)
     return website
@@ -22,14 +22,22 @@ def handle_Profile_PageObject(profile, pageobject):
     new_profile_pageobject.save()
     return new_profile_pageobject
 
-def handle_Profile_PageobjectLog(profile_pageobject, logtime):
-    profile_pageobject_log = ProfilePageobjectLog(profile_pageobject=profile_pageobject, logtime=logtime)
-    profile_pageobject_log.save()
+def handle_PageobjectLog(profile, pageobject):
+    pageobject_log = PageobjectLog(profile=profile, pageobject=pageobject)
+    pageobject_log.save()
 
 def handle_visit(profile, page):
-    page = Page.objects.get(href=page)
-    visit, created = Visit.objects.get_or_create(profile=profile, page=page)
-    visit.counter += 1
-    visit.save()
-    return visit
+    try:
+        Page.objects.get(href=page)
+        page = Page.objects.get(href=page)
+        visit, created = Visit.objects.get_or_create(profile=profile, page=page)
+        if created:
+            visit2 = Visit.objects.filter(profile=profile).order_by('-id')[0]
+            if not visit2.page == page:
+                visit.counter += 1
+        else:
+            visit.counter = 1
+        visit.save()
+    except Page.DoesNotExist:
+        page = None
 
