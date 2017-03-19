@@ -23,7 +23,9 @@ import numpy as np
 from neomodel import db as neodb
 # from py2neo import cypher
 from sklearn.preprocessing import normalize
+from sklearn import preprocessing
 from neomodel import config as neoconfig
+from iteration_utilities import unique_everseen
 def index(request):
     return HttpResponse("Glad to check that the PopClick server is online.")
 
@@ -60,12 +62,13 @@ def get_suggestion(request, token):
         # Making sure the profile is activated and in order
         if own_profile and own_profile.activated and own_key == str(object_auth):
             # Check if the page was already visited by the suse in last 5 seconds
-            Visit.objects.filter(profile=own_profile).order_by('-id')[1]
-            # Get last visit of user
-            # Get last selected element of user lochref href
-
-            pageobjects = received_json_data['pageobjects']
             try:
+                Visit.objects.filter(profile=own_profile).order_by('-id')[1]
+
+                 # Get last visit of user
+                 # Get last selected element of user lochref href
+
+                pageobjects = received_json_data['pageobjects']
                 # Getting web page origin
                 base_uri = pageobjects[0][0]
                 handle_visit(own_profile, base_uri)
@@ -89,6 +92,7 @@ def get_suggestion(request, token):
                 profiles = Profile.objects.filter(id__in=profiles_pageobjects.values('profile').distinct())
                 profiles_interests = ProfileInterest.objects.filter(profile__in=profiles)
                 selectable_values = []
+                pageobjectIndex_tokens = {}
                 # Normalized profile pageobject selection among profiles po.
                 # Dictionaries for the profile page selections, profile ages, Standardized profile interests, standardized genders
                 nm_pg_select = {}
@@ -106,7 +110,7 @@ def get_suggestion(request, token):
                     return render(request, 'suggestions.json', context)
                 # If the database only hase one user we have to handle a small age difference.
                 if highest_age - lowest_age == 0:
-                    lowest_age = 2014
+                    lowest_age = lowest_age - 1
                 # The different types of genders
                 genders = ['Female', 'Male', 'Other', 'Irrelevant']
 
@@ -163,6 +167,13 @@ def get_suggestion(request, token):
                     pr_po_std_mn_gender = []
                     # For each profile mapped to an object
                     for pro in profiles_pageobjects.filter(pageobject=po):
+                        current_element_index = -1
+                        if po.text in received_pageobjects_text:
+                            current_element_index = received_pageobjects_text.index(po.text)
+                        else:
+                            current_element_index = received_pageobjects_hrefs.index(po.href)
+                        pageobjectIndex_tokens.setdefault(current_element_index, []).append(pro.profile.token)
+
                         # Add the profile normalised selections and age of the object/Profile
                         pr_po_mn_select += float(nm_pg_select[str(pro.id)])
                         pr_po_mn_age += float(nm_pr_ages[str(pro.profile.id)])
@@ -203,8 +214,7 @@ def get_suggestion(request, token):
                 prof_int_index = [interests.index(pri) for pri in prof_int]
                 for it in prof_int_index:
                     standardized_own_profile_interests[it] = 1
-                own_porfile_properties = (np.append([float((profile.age-lowest_age)/(highest_age-lowest_age))], np.append(standardized_own_profile_interests, np.append(standardized_own_profile_gender,[1.0]))))  
-                
+                own_porfile_properties = np.append([float((profile.age-lowest_age)/(highest_age-lowest_age))], np.append(standardized_own_profile_interests, np.append(standardized_own_profile_gender,[1.0])))
                 # Normalize columns
                 complete_matrix = np.matrix(normalize(complete_matrix, axis=0, norm='l1'))
                 # Euclidean distance calculation
@@ -216,39 +226,75 @@ def get_suggestion(request, token):
                     profile_po_distance.append((po_indexs[rows],(np.sqrt(current_row))))
                 # Sorted list of distances
                 profile_po_distance = sorted(profile_po_distance, key=itemgetter(1))
-                pro_po_d = []
-                pro_po_t = []
-                pro_po_h = []
+
+                # received_pageobjects_text, href, profile_po_distance, pageobjectIndex
+
+                itemIndex_distance = {}
                 for item in profile_po_distance:
                     if item[0].text in received_pageobjects_text:
-                        # pro_po_t.append(item[0].text)
-                        # pro_po_d.append(0)
-                        pro_po_d.append(received_pageobjects_text.index(item[0].text))
+                        itemIndex_distance[received_pageobjects_text.index(item[0].text)] = item[1]
                     else:
-                        # pro_po_d.append(1)
-                        # pro_po_h.append(item[0].href)
-                        pro_po_d.append(received_pageobjects_hrefs.index(item[0].href))
+                        itemIndex_distance[received_pageobjects_hrefs.index(item[0].href)] = item[1]
+                pageobjectIndex_UUValues = {}
+                for e in pageobjectIndex_tokens.keys():
+                    uuweb_pageobject_val = 0.0
+                    UU_w = UU_websites(token, base_uri)
+                    if(pageobjectIndex_tokens[e] == None):
+                        pageobjectIndex_UUValues[e] = 0.0
+                    else:
+                        for t in pageobjectIndex_tokens[e]:
+                            if not UU_websites(token, base_uri).get(t) == None:
+                                uuweb_pageobject_val = uuweb_pageobject_val + float(UU_w[t])
+                        pageobjectIndex_UUValues[e] = uuweb_pageobject_val
+                for i in itemIndex_distance.keys():
+                    itemIndex_distance[i] = itemIndex_distance[i]*(1.0-pageobjectIndex_UUValues[i])
+                itemIndex_distance = sorted(itemIndex_distance.items(), key=itemgetter(1))
+                recommendation_with_UU = [i[0] for i in itemIndex_distance]
 
-                # # Gives the index of the element Matching its rank
                 sent_recommendation = []
-                for i in pro_po_d:
+                for i in recommendation_with_UU:
                     if i not in sent_recommendation:
                         sent_recommendation.append(i)
-                # obbb = len(ProfileN.nodes.get(token=token).get_tokens_from_common_Websites())
-
-                # Just to print
-                context = {'base': ProfileN.nodes.get(token=token).get_tokens_from_common_Websites(page=base_uri), 'recommendation_text': json.dumps(pro_po_t), 'recommendation_href':json.dumps(pro_po_h), 'recommendation':pro_po_d}
+                context = {'base':base_uri , 'recommendation':sent_recommendation}
 
             except (Page.DoesNotExist):
                 context = {'base': base_uri, 'recommendation': "No known objects"}
             except KeyError as e:
                 context = {'base': base_uri, 'recommendation': "Cross matching issue"}
             return render(request, 'suggestions.json', context)
+        else:
+            context = {'base': base_uri, 'recommendation': "Authentication Token or Key do not match"}
+            return render(request, 'suggestions.json', context)
 # def KNN_regression()
 
-# def getTrend()
-# def user_user_recommendation:
-    
+# Need index of objects which users have interacted with while considering the number of users
+
+def UU_websites(token, base_uri):
+    uu_tokens = []
+    uu_vals = []
+    UU_map = {}
+    matching_profile_website_query = ProfileN.nodes.get(token=token).get_tokens_from_common_Websites(page=base_uri)[0]
+    profile_numbers= len(matching_profile_website_query)
+    for o in matching_profile_website_query:
+        tok = o[0].properties['token']
+        nb = o[1]
+        uu_tokens.append(tok)
+        uu_vals.append(nb)
+    if(len(uu_vals) != 0):
+        uu_vals = [uu_vals]
+        uu_vals = normalize(uu_vals, axis=1)
+        uu_vals = uu_vals[0]
+    for idx, token in enumerate(uu_tokens):
+        tp = uu_vals[idx]*(1.0/float(profile_numbers))
+        UU_map[token] = tp
+    return UU_map
+
+def numpy_minmax(X):
+    X = np.array(X)
+    minim = X.min()
+    if X.max() == X.min():
+        minim = minim - 1
+    return (X - minim) / (X.max() - minim)
 
 @csrf_exempt
 # Href unique constraint violation

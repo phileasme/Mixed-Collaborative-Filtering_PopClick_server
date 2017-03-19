@@ -1,7 +1,4 @@
 {
   "base": "{{ base }}",
-  "recommendation_indexs": "{{ recommendation_indexs }}",
-  "recommendation_text": "{{ recommendation_text }}",
-  "recommendation_href": "{{ recommendation_href }}",
   "recommendation": "{{ recommendation }}"
 }
