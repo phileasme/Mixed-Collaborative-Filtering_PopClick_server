@@ -46,10 +46,20 @@ def keygen(request, key):
     own_key.save()
     return HttpResponse("New Key generated")
 
-# def remove_mistake(request, ):
+# def remove_mistake(, ):
     # Already visited in the last 5 seconds
+def get_formatted_user_interests(profile, query_profiles_interests=None):
+    interests = [i.name for i in Interest.objects.all().order_by('name')]
+    standardized_profile_interests = [0]*(len(interests))
+    if query_profile_interests != None:
+        pr_int_lvl = [(pi['interest'],pi['level']) for pi in query_profiles_interests.filter(profile=profile).values('interest','level')]
+    else:
+        pr_int_lvl = [(pi['interest'],pi['level']) for pi in ProfileInterest.objects.filter(profile=profile).values('interest','level')]
+    for it in pr_int_lvl_index:
+        standardized_profile_interests[it[0]] = it[1]
+    return standardized_profile_interests
 
-# Profile Based Collaborative filtering
+# Profile and User-User Demographic Based Collaborative filtering
 @csrf_exempt
 def get_suggestion(request, token):
     if request.method == 'POST':
@@ -61,13 +71,17 @@ def get_suggestion(request, token):
         own_key = SecureAuth.objects.get(profile=own_profile).key
         # Making sure the profile is activated and in order
         if own_profile and own_profile.activated and own_key == str(object_auth):
+            
             # Check if the page was already visited by the suse in last 5 seconds
+            # Make a seperate method for this
+            # try:
+            #     Visit.objects.filter(profile=own_profile).order_by('-id')[1]
+
+            # except IndexError:
+            #     str("")
             try:
-                Visit.objects.filter(profile=own_profile).order_by('-id')[1]
-
-                 # Get last visit of user
-                 # Get last selected element of user lochref href
-
+                # Get last visit of user
+                # Get last selected element of user location href href
                 pageobjects = received_json_data['pageobjects']
                 # Getting web page origin
                 base_uri = pageobjects[0][0]
@@ -93,6 +107,7 @@ def get_suggestion(request, token):
                 profiles_interests = ProfileInterest.objects.filter(profile__in=profiles)
                 selectable_values = []
                 pageobjectIndex_tokens = {}
+                pageobjectID_tokens= {}
                 # Normalized profile pageobject selection among profiles po.
                 # Dictionaries for the profile page selections, profile ages, Standardized profile interests, standardized genders
                 nm_pg_select = {}
@@ -128,23 +143,23 @@ def get_suggestion(request, token):
 
                     nm_pr_ages[str(profile.id)] = float((profile.age-lowest_age)/(highest_age-lowest_age))
                     # Retreiving the profile's interests
-                    pr_int = [pi['interest'] for pi in profiles_interests.filter(profile=profile).values('interest')]
-                    # Index matching the interest location within the list of all known interests(alphabetically)
-                    pr_int_index = [interests.index(pri) for pri in pr_int]
+                    pr_int_lvl = [(pi['interest'],pi['level']) for pi in profiles_interests.filter(profile=profile).values('interest','level')]
+                    # Index matching the interest location and level of interest within the list of all known interests(alphabetically)
+                    pr_int_lvl_index = [(interests.index(pri[0]),pri[1]) for pri in pr_int_lvl]
 
                     # Array of zero's for a standardized
                     standardized_profile_interests = [0]*(len(interests))
                     standardized_profile_gender = [0]*(len(genders))
                     # Standardising the profile interests and gender creating two rows containing 0's and 1's
-                    for it in pr_int_index:
-                        standardized_profile_interests[it] = 1
+                    for it in pr_int_lvl_index:
+                        standardized_profile_interests[it[0]] = it[1]
                     standardized_profile_gender[genders.index(profile.gender)] = 1
 
                     # Add standardised list of profile interests to the dictionary of standardised interests
                     std_pr_int[str(profile.id)] = standardized_profile_interests
                     # Add standardised list of profile gender to the dictionary of standardised gender 
                     std_gender[str(profile.id)] = [standardized_profile_gender]
-                
+
                 # Ordered list of pageobjects
                 po_indexs = []
                 # Dictionary of normalised Age per profile per page object
@@ -173,7 +188,7 @@ def get_suggestion(request, token):
                         else:
                             current_element_index = received_pageobjects_hrefs.index(po.href)
                         pageobjectIndex_tokens.setdefault(current_element_index, []).append(pro.profile.token)
-
+                        pageobjectID_tokens.setdefault(po.id, []).append(pro.profile.token)
                         # Add the profile normalised selections and age of the object/Profile
                         pr_po_mn_select += float(nm_pg_select[str(pro.id)])
                         pr_po_mn_age += float(nm_pr_ages[str(pro.profile.id)])
@@ -196,7 +211,7 @@ def get_suggestion(request, token):
                     po_norm_age[po] = [pr_po_mn_age]
 
                 complete_matrix = []
-                # Convert to numpy array
+                # Converting to numpy array
                 postdnormintmtx = np.array(po_std_norm_interests_matrix)
                 postdnormgendmtx = np.array(po_std_norm_gender_matrix)
                 np.seterr(divide='ignore', invalid='ignore')
@@ -204,7 +219,8 @@ def get_suggestion(request, token):
                 # Create the complete matrix
                 # Matrix structure : age, interests , gender, selection
                 for po in matching_pageobjects.order_by('href'):
-                    complete_matrix.append(np.append(np.append(np.append(po_norm_age[po],postdnormintmtx[po_indexs.index(po)]),postdnormgendmtx[po_indexs.index(po)]),po_norm_select[po]))
+                    complete_matrix.append(np.append(np.append(np.append(po_norm_age[po],
+                        postdnormintmtx[po_indexs.index(po)]),postdnormgendmtx[po_indexs.index(po)]),po_norm_select[po]))
                 
                 # Individual Row, Could be simplified to simply getting the actual user row in the matrix
                 standardized_own_profile_gender = [0]*(len(genders))
@@ -227,9 +243,10 @@ def get_suggestion(request, token):
                 # Sorted list of distances
                 profile_po_distance = sorted(profile_po_distance, key=itemgetter(1))
 
-                # received_pageobjects_text, href, profile_po_distance, pageobjectIndex
-
+                # ProfileBased Distance
                 itemIndex_distance = {}
+                # ProfileBase and UU Demographic
+                itemIndex_UU_Distance = {}
                 for item in profile_po_distance:
                     if item[0].text in received_pageobjects_text:
                         itemIndex_distance[received_pageobjects_text.index(item[0].text)] = item[1]
@@ -247,9 +264,9 @@ def get_suggestion(request, token):
                                 uuweb_pageobject_val = uuweb_pageobject_val + float(UU_w[t])
                         pageobjectIndex_UUValues[e] = uuweb_pageobject_val
                 for i in itemIndex_distance.keys():
-                    itemIndex_distance[i] = itemIndex_distance[i]*(1.0-pageobjectIndex_UUValues[i])
-                itemIndex_distance = sorted(itemIndex_distance.items(), key=itemgetter(1))
-                recommendation_with_UU = [i[0] for i in itemIndex_distance]
+                    itemIndex_UU_Distance[i] = itemIndex_distance[i]*(1.0-pageobjectIndex_UUValues[i])
+                itemIndex_UU_Distance = sorted(itemIndex_distance.items(), key=itemgetter(1))
+                recommendation_with_UU = [i[0] for i in itemIndex_UU_Distance]
 
                 sent_recommendation = []
                 for i in recommendation_with_UU:
@@ -266,9 +283,10 @@ def get_suggestion(request, token):
             context = {'base': base_uri, 'recommendation': "Authentication Token or Key do not match"}
             return render(request, 'suggestions.json', context)
 # def KNN_regression()
-
-# Need index of objects which users have interacted with while considering the number of users
-
+# def update_user_interest:
+    # If the latest selected pageobject by the user isn't the first selection
+    # and apply algorithm
+# Returns a similarity index of the user with others while considering the number of users to slice
 def UU_websites(token, base_uri):
     uu_tokens = []
     uu_vals = []
@@ -289,6 +307,7 @@ def UU_websites(token, base_uri):
         UU_map[token] = tp
     return UU_map
 
+# def()
 def numpy_minmax(X):
     X = np.array(X)
     minim = X.min()
@@ -296,6 +315,8 @@ def numpy_minmax(X):
         minim = minim - 1
     return (X - minim) / (X.max() - minim)
 
+# def update_user_interest:
+# 
 @csrf_exempt
 # Href unique constraint violation
 def populate_selectable(request, token):
@@ -379,7 +400,6 @@ def create_profile(request):
                     new_interest.save()
                     new_profile_interest = ProfileInterest(profile=new_profile, interest=new_interest)
                     new_profile_interest.save()
-                #  Convert to json array : data['interests']
             context = { 'profile' : new_profile }
         else:
             context = { 'profile_error' : profile_create_check(received_json_data, Interests) }
@@ -387,22 +407,27 @@ def create_profile(request):
 
 # A profile must have a valid age, gender, logtime and at least 3 interests.
 def profile_create_check(json_object, Interests):
-    if {"age", "gender", "logtime", "interests"} <= json_object.keys():
+    # The json attributes must be the following
+    if {"age", "gender", "logtime", "interests", "signed"} <= json_object.keys():
+        # The user must be at least 3 years old and valid.
         if not(RepresentsInt(json_object['age']) and int(json_object['age']) > 3 and int(json_object['age']) < 120):
             return "INVALID_AGE"
         else:
+            # The choosen gender of the individual must fall in following categories
             if not str(json_object['gender']) in ["Male","Female","Other","Irrelevant"]:
                 return "INVALID_GENDER"
             else:
-                # if datetime.strptime(received_json_data['logtime'], r'%Y-%m-%d %H:%M')
                 try:
-                    d = datetime.strptime(json_object['logtime'], r'%Y-%m-%d %H:%M')
+                    if json_object['signed'] != 1:
+                        return "NOT_SIGNED"
+                    # d = datetime.strptime(json_object['logtime'], r'%Y-%m-%d %H:%M')
                     own_interests = 0
                     for inter in json_object['interests']:
                         if inter in Interests:
                             own_interests+=1
+                    # The user must have at least choosen 3 interests and no more than the number of known Interests
                     if not 3 <= own_interests < len(Interests):
-                        return own_interests
+                        return "WRONG_INTERESTS"
                     else:
                         return "VALIDATED"
                 except ValueError:

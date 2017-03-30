@@ -30,13 +30,7 @@ def handle_visit(profile, page):
     try:
         Page.objects.get(href=page)
         page = Page.objects.get(href=page)
-        visit, created = Visit.objects.get_or_create(profile=profile, page=page)
-        if created:
-            visit2 = Visit.objects.filter(profile=profile).order_by('-id')[0]
-            if not visit2.page == page:
-                visit.counter += 1
-        else:
-            visit.counter = 1
+        visit = Visit(profile=profile, page=page)
         visit.save()
     except Page.DoesNotExist:
         page = None

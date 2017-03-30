@@ -102,23 +102,20 @@ class ProfileInterest(models.Model):
     def __str__(self):
         return self.profile.token+' '+self.interest.name+' '+str(self.level)
 
-# class PageInterest(models.Model):
-#     page = models.ForeignKey(Page, on_delete=models.CASCADE)
-#     interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
-#     counter = models.IntegerField(default=1)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-#     class Meta:
-#         unique_together = ('page','interest',)
+class Profile_PO_Ticket(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
+    page = models.ForeignKey(Page, on_delete=models.CASCADE)
 
-# class PageobjectInterest(models.Model):
-#     pageobject = models.ForeignKey(Profile, on_delete=models.CASCADE)
-#     interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
-#     counter = models.IntegerField(default=1)
-#     class Meta:
-#         unique_together = ('pageobject','interest',)
-#     def __str__(self):
-#         return self.pageobject.href+' '+self.interest.name+' '+str(self.counter)
+# To calculate KNN or RMSE for ML
+class Profile_PO_InterestDistance(models.Model):
+    ticket = models.ForeignKey(Profile_PO_Ticket, on_delete=models.CASCADE)
+    pageobject = models.ForeignKey(PageObject, on_delete=models.CASCADE)
+    interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
+    po_distance = models.DecimalField(max_digits=10, decimal_places=9)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        unique_together = ('ticket','pageobject','interest',)
 
 class WebsiteN(StructuredNode):
     host = StringProperty(unique_index=True, required=True)
@@ -133,6 +130,7 @@ class ProfileN(StructuredNode):
     website = RelationshipTo(WebsiteN, 'HAS_A_WEBSITE')
     page = RelationshipTo(PageN, 'HAS_A_PAGE')
     def get_tokens_from_common_Websites(self, page):
-        results, metadata =self.cypher('START u=node({self}) MATCH (u:ProfileN)-[e:HAS_A_WEBSITE]->(w:WebsiteN)<-[e2:HAS_A_WEBSITE]-(u2:ProfileN)-[r:HAS_A_PAGE]->(p:PageN {href:"'+page+'"})\n RETURN u2, count(w)\n ORDER BY count(w) LIMIT 25')
-        # results, metadata = self.cypher("START u=node({self}) MATCH (u:ProfileN)-[e:HAS_A_WEBSITE]->(w:WebsiteN)<-[e2:HAS_A_WEBSITE]-(u2:ProfileN)\n RETURN u2, count(w) ORDER BY count(w) LIMIT 25")
+        results, metadata =self.cypher('START u=node({self}) MATCH (u:ProfileN)-[e:HAS_A_WEBSITE]->'+
+            '(w:WebsiteN)<-[e2:HAS_A_WEBSITE]-(u2:ProfileN)-[r:HAS_A_PAGE]->(p:PageN {href:"'+page+'"})\n '+
+            'RETURN u2, count(w)\n ORDER BY count(w) LIMIT 25')
         return [results]
