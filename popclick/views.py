@@ -25,6 +25,7 @@ from sklearn.preprocessing import normalize
 from sklearn import preprocessing
 from neomodel import config as neoconfig
 from iteration_utilities import unique_everseen
+from django.utils import timezone 
 
 def index(request):
     return HttpResponse("Online Check.")
@@ -46,8 +47,18 @@ def keygen(request, key):
     own_key.save()
     return HttpResponse("New Key generated")
 
-# def remove_mistake(, ):
-    # Already visited in the last 5 seconds
+# Already visited in the last 5 seconds
+def handle_browsing_mistake(profile, base_uri):
+    last_object_visited_by_profile = ProfilePageobject.objects.filter(profile=profile).last()
+    l_o_v_b_p_href = last_object_visited_by_profile.pageobject.href
+    l_o_v_b_p_page_href = last_object_visited_by_profile.pageobject.page.href
+    l_o_v_b_p_time = last_object_visited_by_profile.created_at
+    if l_o_v_b_p_href != l_o_v_b_p_page_href and last_object_visited_by_profile.selections == 1:
+        if base_uri == l_o_v_b_p_page_href and (timezone.now() - l_o_v_b_p_time).total_seconds() < 5.0:
+            if len(ProfilePageobject.objects.filter(profile=profile, pageobject=last_object_visited_by_profile.pageobject)) == 1:
+                last_object_visited_by_profile.pageobject.delete()
+            last_object_visited_by_profile.delete()
+
 def get_formatted_user_interests(profile, query_profiles_interests=None):
     interests = [i.name for i in Interest.objects.all().order_by('name')]
     standardized_profile_interests = [0]*(len(interests))
@@ -71,21 +82,16 @@ def get_suggestion(request, token):
         own_key = SecureAuth.objects.get(profile=own_profile).key
         # Making sure the profile is activated and in order
         if own_profile and own_profile.activated and own_key == str(object_auth):
-            
-            # Check if the page was already visited by the suse in last 5 seconds
-            # Make a seperate method for this
-            # try:
-            #     Visit.objects.filter(profile=own_profile).order_by('-id')[1]
-
-            # except IndexError:
-            #     str("")
             try:
                 # Get last visit of user
                 # Get last selected element of user location href href
                 pageobjects = received_json_data['pageobjects']
+
                 # Getting web page origin
                 base_uri = pageobjects[0][0]
                 handle_visit(own_profile, base_uri)
+                handle_browsing_mistake(own_profile, base_uri)
+
                 # Extracting the received pageobjects
                 received_pageobjects_hrefs = [o[1] for o in pageobjects]
                 received_pageobjects_text = [o[2] for o in pageobjects]
@@ -121,7 +127,7 @@ def get_suggestion(request, token):
                 interests = [i.name for i in Interest.objects.all().order_by('name')]
                 # If their are no records of ages
                 if highest_age is None or lowest_age is None:
-                    context = {'base': base_uri, 'obj': "No known objects"}
+                    context = {'base': base_uri, 'recommendation': "No known objects"}
                     return render(request, 'suggestions.json', context)
                 # If the database only hase one user we have to handle a small age difference.
                 if highest_age - lowest_age == 0:
@@ -272,7 +278,8 @@ def get_suggestion(request, token):
                 for i in recommendation_with_UU:
                     if i not in sent_recommendation:
                         sent_recommendation.append(i)
-                context = {'base':base_uri , 'recommendation':sent_recommendation}
+
+                context = {'base':base_uri , 'recommendation': sent_recommendation}
 
             except (Page.DoesNotExist):
                 context = {'base': base_uri, 'recommendation': "No known objects"}
