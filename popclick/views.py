@@ -21,13 +21,13 @@ from numpy import *
 from operator import itemgetter
 import numpy as np
 from neomodel import db as neodb
-# from py2neo import cypher
 from sklearn.preprocessing import normalize
 from sklearn import preprocessing
 from neomodel import config as neoconfig
 from iteration_utilities import unique_everseen
+
 def index(request):
-    return HttpResponse("Glad to check that the PopClick server is online.")
+    return HttpResponse("Online Check.")
 
 @csrf_exempt
 def viewkey(request, key):

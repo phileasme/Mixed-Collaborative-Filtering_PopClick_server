@@ -102,6 +102,17 @@ class ProfileInterest(models.Model):
     def __str__(self):
         return self.profile.token+' '+self.interest.name+' '+str(self.level)
 
+class ProfileVirtualInterest(models.Model):
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)    
+    interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
+    level = models.IntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        unique_together = ('profile','interest',)
+    def __str__(self):
+        return self.profile.token+' '+self.interest.name+' '+str(self.level)
+
 class Profile_PO_Ticket(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     page = models.ForeignKey(Page, on_delete=models.CASCADE)
