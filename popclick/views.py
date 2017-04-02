@@ -50,14 +50,15 @@ def keygen(request, key):
 # Already visited in the last 5 seconds
 def handle_browsing_mistake(profile, base_uri):
     last_object_visited_by_profile = ProfilePageobject.objects.filter(profile=profile).last()
-    l_o_v_b_p_href = last_object_visited_by_profile.pageobject.href
-    l_o_v_b_p_page_href = last_object_visited_by_profile.pageobject.page.href
-    l_o_v_b_p_time = last_object_visited_by_profile.created_at
-    if l_o_v_b_p_href != l_o_v_b_p_page_href and last_object_visited_by_profile.selections == 1:
-        if base_uri == l_o_v_b_p_page_href and (timezone.now() - l_o_v_b_p_time).total_seconds() < 5.0:
-            if len(ProfilePageobject.objects.filter(profile=profile, pageobject=last_object_visited_by_profile.pageobject)) == 1:
-                last_object_visited_by_profile.pageobject.delete()
-            last_object_visited_by_profile.delete()
+    if last_object_visited_by_profile != None:
+        l_o_v_b_p_href = last_object_visited_by_profile.pageobject.href
+        l_o_v_b_p_page_href = last_object_visited_by_profile.pageobject.page.href
+        l_o_v_b_p_time = last_object_visited_by_profile.created_at
+        if l_o_v_b_p_href != l_o_v_b_p_page_href and last_object_visited_by_profile.selections == 1:
+            if base_uri == l_o_v_b_p_page_href and (timezone.now() - l_o_v_b_p_time).total_seconds() < 5.0:
+                if len(ProfilePageobject.objects.filter(profile=profile, pageobject=last_object_visited_by_profile.pageobject)) == 1:
+                    last_object_visited_by_profile.pageobject.delete()
+                last_object_visited_by_profile.delete()
 
 def get_formatted_user_interests(profile, query_profiles_interests=None):
     interests = [i.name for i in Interest.objects.all().order_by('name')]
