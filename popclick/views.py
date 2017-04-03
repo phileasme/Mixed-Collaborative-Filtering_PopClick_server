@@ -2,30 +2,31 @@ from __future__ import division
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render
 from django.http import HttpResponse
+from django.http import StreamingHttpResponse
 import random as rand
 from django.core import serializers
 from datetime import datetime
 from django.utils import timezone
+import time
 import requests
 import json
 from django.db.models import Q
-from django.http import StreamingHttpResponse
 from django.db import IntegrityError
 from .models import Interest, Visit, Website, SecureAuth, Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
 from neomodel import (StructuredNode, StringProperty, IntegerProperty,
         RelationshipTo, RelationshipFrom)
+from neomodel import db as neodb
 from .models import PageN, WebsiteN, ProfileN
-from popclick.populate_suggestable import *
 from django.db.models import Max, Min
 from numpy import *
-from operator import itemgetter
 import numpy as np
-from neomodel import db as neodb
+from operator import itemgetter
 from sklearn.preprocessing import normalize
 from sklearn import preprocessing
 from neomodel import config as neoconfig
 from iteration_utilities import unique_everseen
-from django.utils import timezone 
+from popclick.populate_suggestable import *
+from popclick.neural_network_int import *
 
 def index(request):
     return HttpResponse("Online Check.")
@@ -47,7 +48,7 @@ def keygen(request, key):
     own_key.save()
     return HttpResponse("New Key generated")
 
-# Already visited in the last 5 seconds
+# Only add element if it the page has been visited for more than 5 seconds without coming back to origin.
 def handle_browsing_mistake(profile, base_uri):
     last_object_visited_by_profile = ProfilePageobject.objects.filter(profile=profile).last()
     if last_object_visited_by_profile != None:
@@ -226,8 +227,11 @@ def get_suggestion(request, token):
                 # Create the complete matrix
                 # Matrix structure : age, interests , gender, selection
                 for po in matching_pageobjects.order_by('href'):
-                    complete_matrix.append(np.append(np.append(np.append(po_norm_age[po],
-                        postdnormintmtx[po_indexs.index(po)]),postdnormgendmtx[po_indexs.index(po)]),po_norm_select[po]))
+                    complete_matrix.append(np.append(np.append(np.append(np.append(po_norm_age[po],
+                        postdnormintmtx[po_indexs.index(po)]),
+                    postdnormgendmtx[po_indexs.index(po)]),
+                    po_norm_select[po]),
+                    (1.0-float(time.mktime(po.updated_at.now().timetuple()))/float(time.mktime(datetime.now().timetuple())))))
                 
                 # Individual Row, Could be simplified to simply getting the actual user row in the matrix
                 standardized_own_profile_gender = [0]*(len(genders))
@@ -237,7 +241,11 @@ def get_suggestion(request, token):
                 prof_int_index = [interests.index(pri) for pri in prof_int]
                 for it in prof_int_index:
                     standardized_own_profile_interests[it] = 1
-                own_porfile_properties = np.append([float((profile.age-lowest_age)/(highest_age-lowest_age))], np.append(standardized_own_profile_interests, np.append(standardized_own_profile_gender,[1.0])))
+                    # , float(time.mktime(datetime.now().timetuple()))
+                own_porfile_properties = np.append([float((profile.age-lowest_age)/(highest_age-lowest_age))],
+                    np.append(standardized_own_profile_interests,
+                    np.append(standardized_own_profile_gender, 
+                    np.append([1.0],[1.0]))))
                 # Normalize columns
                 complete_matrix = np.matrix(normalize(complete_matrix, axis=0, norm='l1'))
                 # Euclidean distance calculation
