@@ -12,7 +12,7 @@ import requests
 import json
 from django.db.models import Q
 from django.db import IntegrityError
-from .models import Interest, Visit, Website, SecureAuth, Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
+from .models import Interest, PageobjectInterest, Visit, Website, SecureAuth, Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
 from neomodel import (StructuredNode, StringProperty, IntegerProperty,
         RelationshipTo, RelationshipFrom)
 from neomodel import db as neodb
@@ -27,19 +27,10 @@ from neomodel import config as neoconfig
 from iteration_utilities import unique_everseen
 from popclick.populate_suggestable import *
 from popclick.neural_network_int import *
+import threading
 
 def index(request):
     return HttpResponse("Online Check.")
-
-@csrf_exempt
-def viewkey(request, key):
-    own_profile = Profile.objects.get(token=key)
-    own_key = SecureAuth.objects.get(profile=own_profile)
-    if own_key:
-        context = {'recommendation': "Alive"+own_key.key}
-    else:
-        context = {'recommendation': "Dead"}
-    return render(request, 'viewkey.json', context)
 
 @csrf_exempt
 def keygen(request, key):
@@ -61,16 +52,31 @@ def handle_browsing_mistake(profile, base_uri):
                     last_object_visited_by_profile.pageobject.delete()
                 last_object_visited_by_profile.delete()
 
-def get_formatted_user_interests(profile, query_profiles_interests=None):
+# def get_formatted_user_interests(profile, query_profiles_interests=None):
+#     interests = [i.name for i in Interest.objects.all().order_by('name')]
+#     standardized_profile_interests = [0]*(len(interests))
+#     if query_profile_interests != None:
+#         pr_int_lvl = [(pi['interest'],pi['level']) for pi in query_profiles_interests.filter(profile=profile).values('interest','level')]
+#     else:
+#         pr_int_lvl = [(pi['interest'],pi['level']) for pi in ProfileInterest.objects.filter(profile=profile).values('interest','level')]
+#     for it in pr_int_lvl_index:
+#         standardized_profile_interests[it[0]] = it[1]
+#     return standardized_profile_interests
+
+def get_formatted_user_or_pageobject_interests(profile_or_pageobject, query_profiles_interests=None):
     interests = [i.name for i in Interest.objects.all().order_by('name')]
-    standardized_profile_interests = [0]*(len(interests))
-    if query_profile_interests != None:
-        pr_int_lvl = [(pi['interest'],pi['level']) for pi in query_profiles_interests.filter(profile=profile).values('interest','level')]
+    standardized_profile_or_pageobject_interests = [0]*(len(interests))
+    if query_profiles_interests == None:
+        if profile_or_pageobject.__class__.__name__ == 'Profile':
+            query_profiles_interests = ProfileInterest.objects
+
+    if query_profiles_interests != None:
+        pr_int_lvl_index = [(pi['interest'],pi['level']) for pi in query_profiles_interests.filter(profile=profile_or_pageobject).values('interest','level')]
     else:
-        pr_int_lvl = [(pi['interest'],pi['level']) for pi in ProfileInterest.objects.filter(profile=profile).values('interest','level')]
+        pr_int_lvl_index = [(pi['interest'],pi['level']) for pi in PageobjectInterest.objects.filter(pageobject=profile_or_pageobject).values('interest','level')]
     for it in pr_int_lvl_index:
-        standardized_profile_interests[it[0]] = it[1]
-    return standardized_profile_interests
+        standardized_profile_or_pageobject_interests[interests.index(it[0])] = it[1]
+    return standardized_profile_or_pageobject_interests
 
 # Profile and User-User Demographic Based Collaborative filtering
 @csrf_exempt
@@ -102,6 +108,8 @@ def get_suggestion(request, token):
             except IndexError:
                 context = {'base': "Current", 'recommendation': "None"}
                 return render(request, 'suggestions.json', context)
+
+            # Method (base_uri, received_page_objects_href, received_page_objects_text)
             try:
                 # Cross reference objects visible to the user and the objects stored
                 page = Page.objects.get(href=base_uri)
@@ -221,6 +229,14 @@ def get_suggestion(request, token):
                 complete_matrix = []
                 # Converting to numpy array
                 postdnormintmtx = np.array(po_std_norm_interests_matrix)
+                postdnormintmtx = normalize(postdnormintmtx, axis=0, norm='l1')
+                # context = {'base': "Token Issue", 'recommendation': postdnormintmtx}
+                # return render(request, 'suggestions.json', context)
+
+                # It is necessary to hold a current reference to the pageobject interests for the learning process
+                thr = threading.Thread(target=pageobject_interests_update(interests, po_indexs, postdnormintmtx), args=(), kwargs={})
+                thr.start()
+
                 postdnormgendmtx = np.array(po_std_norm_gender_matrix)
                 np.seterr(divide='ignore', invalid='ignore')
 
@@ -241,7 +257,7 @@ def get_suggestion(request, token):
                 prof_int_index = [interests.index(pri) for pri in prof_int]
                 for it in prof_int_index:
                     standardized_own_profile_interests[it] = 1
-                    # , float(time.mktime(datetime.now().timetuple()))
+
                 own_porfile_properties = np.append([float((profile.age-lowest_age)/(highest_age-lowest_age))],
                     np.append(standardized_own_profile_interests,
                     np.append(standardized_own_profile_gender, 
@@ -267,28 +283,34 @@ def get_suggestion(request, token):
                         itemIndex_distance[received_pageobjects_text.index(item[0].text)] = item[1]
                     else:
                         itemIndex_distance[received_pageobjects_hrefs.index(item[0].href)] = item[1]
-                pageobjectIndex_UUValues = {}
-                for e in pageobjectIndex_tokens.keys():
-                    uuweb_pageobject_val = 0.0
-                    UU_w = UU_websites(token, base_uri)
-                    if(pageobjectIndex_tokens[e] == None):
-                        pageobjectIndex_UUValues[e] = 0.0
-                    else:
-                        for t in pageobjectIndex_tokens[e]:
-                            if not UU_websites(token, base_uri).get(t) == None:
-                                uuweb_pageobject_val = uuweb_pageobject_val + float(UU_w[t])
-                        pageobjectIndex_UUValues[e] = uuweb_pageobject_val
-                for i in itemIndex_distance.keys():
-                    itemIndex_UU_Distance[i] = itemIndex_distance[i]*(1.0-pageobjectIndex_UUValues[i])
-                itemIndex_UU_Distance = sorted(itemIndex_distance.items(), key=itemgetter(1))
-                recommendation_with_UU = [i[0] for i in itemIndex_UU_Distance]
-
+                error_flag = ""
+                try: 
+                    pageobjectIndex_UUValues = {}
+                    for e in pageobjectIndex_tokens.keys():
+                        uuweb_pageobject_val = 0.0
+                        UU_w = UU_websites(token, base_uri)
+                        if(pageobjectIndex_tokens[e] == None):
+                            pageobjectIndex_UUValues[e] = 0.0
+                        else:
+                            for t in pageobjectIndex_tokens[e]:
+                                if not UU_websites(token, base_uri).get(t) == None:
+                                    uuweb_pageobject_val = uuweb_pageobject_val + float(UU_w[t])
+                            pageobjectIndex_UUValues[e] = uuweb_pageobject_val
+                    for i in itemIndex_distance.keys():
+                        itemIndex_UU_Distance[i] = itemIndex_distance[i]*(1.0-pageobjectIndex_UUValues[i])
+                    itemIndex_UU_Distance = sorted(itemIndex_distance.items(), key=itemgetter(1))
+                    recommendation_with_UU = [i[0] for i in itemIndex_UU_Distance]
+                except:
+                    # If the developer has not connected the neo4j server
+                    # We do not compromise minimum service.
+                    error_flag = 1
+                    recommendation_with_UU = itemIndex_distance
                 sent_recommendation = []
                 for i in recommendation_with_UU:
                     if i not in sent_recommendation:
                         sent_recommendation.append(i)
 
-                context = {'base':base_uri , 'recommendation': sent_recommendation}
+                context = {'base':base_uri , 'recommendation': sent_recommendation, 'error': error_flag}
 
             except (Page.DoesNotExist):
                 context = {'base': base_uri, 'recommendation': "No known objects"}
@@ -296,7 +318,7 @@ def get_suggestion(request, token):
                 context = {'base': base_uri, 'recommendation': "Cross matching issue"}
             return render(request, 'suggestions.json', context)
         else:
-            context = {'base': base_uri, 'recommendation': "Authentication Token or Key do not match"}
+            context = {'base': "Token Issue", 'recommendation': "Authentication Token or Key do not match"}
             return render(request, 'suggestions.json', context)
 # def KNN_regression()
 # def update_user_interest:
@@ -360,23 +382,31 @@ def populate_selectable(request, token):
                 handle_visit(profile, page)
                 profile_pageobject = handle_Profile_PageObject(profile, pageobject)
                 handle_PageobjectLog(profile, pageobject)
-                with neodb.transaction:
-                    websiten = WebsiteN.get_or_create({'host': ''+object_website})
-                    pagen = PageN.get_or_create({'href': object_href})
-                    websiten = WebsiteN.nodes.get(host=object_website)
-                    pagen = PageN.nodes.get(href=object_href)
-                    pagen.website.connect(websiten)
-                    profilen = ProfileN.get_or_create({'token': ''+profile.token})
-                    profilen = ProfileN.nodes.get(token=token)
-                    profilen.page.connect(pagen)
-                    profilen.website.connect(websiten)
-                context = { 'prof':object_profile, 'obj':object_pageobject, 'inter':object_interaction}
+                try:
+                    with neodb.transaction:
+                        websiten = WebsiteN.get_or_create({'host': ''+object_website})
+                        pagen = PageN.get_or_create({'href': object_href})
+                        websiten = WebsiteN.nodes.get(host=object_website)
+                        pagen = PageN.nodes.get(href=object_href)
+                        pagen.website.connect(websiten)
+                        profilen = ProfileN.get_or_create({'token': ''+profile.token})
+                        profilen = ProfileN.nodes.get(token=token)
+                        profilen.page.connect(pagen)
+                        profilen.website.connect(websiten)
+                except:
+                    context = {'error' : 'neo4j_Disconnected'}
+                    return render(request, 'selectable_addition.json', context)
+                
+                learning_thread = threading.Thread(target=learn_interests(profile, pageobject), args=(), kwargs={})
+                learning_thread.start()
+                context = { 'prof':object_profile, 'obj':pageobject, 'inter':object_interaction}
             else:
-                context = { 'storing': 'not'}
+                context = { 'storing': 'Refusing_to_store'}
         else:
             context = { 'error' : 'not_activated'}
         return render(request, 'selectable_addition.json', context)
 
+# Normalize columns
 
 @csrf_exempt
 def get_initial_auth(request, token):
@@ -402,14 +432,17 @@ def create_profile(request):
         if profile_create_check(received_json_data, Interests) == "VALIDATED":
             #Have to add a response if one of age, token, auth, gender, logtime is wrong
             private_k = randToken()
+            # Create a profile.
             new_profile = Profile(
                     age=int(datetime.today().year)-int(received_json_data['age']), 
                     token=randToken(),
                     gender=received_json_data['gender'],
                     logtime=datetime.strptime(received_json_data['logtime'], r'%Y-%m-%d %H:%M'))
             new_profile.save()
+            # Create an encrypted authentication key
             new_secureauth = SecureAuth(profile=new_profile, key=private_k)
             new_secureauth.save()
+            # Create three profile_interest objects.
             for interest in received_json_data['interests']:
                 if interest in Interests:
                     new_interest = Interest(name=interest)
@@ -420,6 +453,7 @@ def create_profile(request):
         else:
             context = { 'profile_error' : profile_create_check(received_json_data, Interests) }
         return render(request, 'create_profile.json', context)
+# def creation(received_json_data)
 
 # A profile must have a valid age, gender, logtime and at least 3 interests.
 def profile_create_check(json_object, Interests):

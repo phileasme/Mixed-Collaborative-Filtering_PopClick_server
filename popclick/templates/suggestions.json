@@ -1,4 +1,5 @@
 {
   "base": "{{ base }}",
-  "recommendation": "{{ recommendation }}"
+  "recommendation": "{{ recommendation }}",
+  "state": "{{ error }}"
 }

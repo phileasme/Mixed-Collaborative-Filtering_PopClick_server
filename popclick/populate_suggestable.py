@@ -1,4 +1,4 @@
-from .models import Interest, Visit, Website, Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
+from .models import Interest, Visit, PageobjectInterest, Website, Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
 def handle_Website(host):
     website, created = Website.objects.get_or_create(host=host)
     return website
@@ -35,3 +35,12 @@ def handle_visit(profile, page):
     except Page.DoesNotExist:
         page = None
 
+def pageobject_interests_update(interests, pageobjects, pageobject_interests):
+    for index, po in enumerate(pageobjects):
+        # for inter in interests:
+        for index_inter, inter in enumerate(pageobject_interests[index]):
+            current_int = Interest.objects.get(name=interests[index_inter])
+            pageobject_interest, created = PageobjectInterest.objects.get_or_create(pageobject=po, interest=current_int)
+            # means you have created a new person
+            pageobject_interest.level=inter
+            pageobject_interest.save()

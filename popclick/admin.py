@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Website, SecureAuth, Page, Interest, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog
+from .models import Website, SecureAuth, Page, PageobjectInterest, Interest, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog
 # Register your models here.
 
 admin.site.register(Interest)
@@ -11,3 +11,4 @@ admin.site.register(Page)
 admin.site.register(ProfilePageobject)
 admin.site.register(SecureAuth)
 admin.site.register(PageobjectLog)
+admin.site.register(PageobjectInterest)

@@ -7,11 +7,11 @@ from django_neomodel import DjangoNode
 from neomodel import (StructuredNode, StringProperty, IntegerProperty,
     UniqueIdProperty, RelationshipTo, RelationshipFrom)# Models are underneath
 from neomodel import config as neoconfig
-
+from django.db import transaction, IntegrityError
 neoconfig.DATABASE_URL = 'bolt://admin:totalrecall@localhost:7687'
 
 class Interest(models.Model):
-    name = models.CharField(max_length=200, primary_key=True)
+    name = models.CharField(max_length=200, primary_key=True, unique=True)
     def __str__(self):
         return self.name
 
@@ -63,6 +63,17 @@ class PageObject(models.Model):
     def __str__(self):
         return self.page.href+" "+self.text
 
+class PageobjectInterest(models.Model):
+    pageobject = models.ForeignKey(PageObject, on_delete=models.CASCADE)
+    interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
+    level = models.FloatField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        unique_together = ('pageobject','interest')
+    def __str__(self):
+        return self.pageobject.text+" "+self.interest.name
+
 class ProfilePageobject(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     pageobject = models.ForeignKey(PageObject, on_delete=models.CASCADE)
@@ -94,7 +105,7 @@ class Visit(models.Model):
 class ProfileInterest(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)    
     interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
-    level = models.IntegerField(default=1)
+    level = models.FloatField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
@@ -113,29 +124,16 @@ class ProfileVirtualInterest(models.Model):
     def __str__(self):
         return self.profile.token+' '+self.interest.name+' '+str(self.level)
 
-class Profile_PO_Ticket(models.Model):
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
-    page = models.ForeignKey(Page, on_delete=models.CASCADE)
-
-# To calculate KNN or RMSE for ML
-class Profile_PO_InterestDistance(models.Model):
-    ticket = models.ForeignKey(Profile_PO_Ticket, on_delete=models.CASCADE)
-    pageobject = models.ForeignKey(PageObject, on_delete=models.CASCADE)
-    interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
-    po_distance = models.DecimalField(max_digits=10, decimal_places=9)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    class Meta:
-        unique_together = ('ticket','pageobject','interest',)
-
 class WebsiteN(StructuredNode):
     host = StringProperty(unique_index=True, required=True)
     pages = RelationshipFrom('PageN', 'IS_FROM')
     profiles = RelationshipFrom('ProfileN', 'IS_FROM')
+
 class PageN(StructuredNode):
     href = StringProperty(unique_index=True, required=True)
     profiles = RelationshipFrom('ProfileN', 'IS_FROM')
     website = RelationshipTo(WebsiteN, 'BELONGS_TO')
+
 class ProfileN(StructuredNode):
     token = StringProperty(unique_index=True, required=True)
     website = RelationshipTo(WebsiteN, 'HAS_A_WEBSITE')
