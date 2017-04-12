@@ -27,28 +27,11 @@ from neomodel import config as neoconfig
 from iteration_utilities import unique_everseen
 from popclick.populating import *
 from popclick.interest_learning import *
+from popclick.UU_based_filtering import *
 import threading
 
 def index(request):
     return HttpResponse("Online Check.")
-
-@csrf_exempt
-def keygen(request, key):
-    own_profile = Profile.objects.get(token=key)
-    own_key = SecureAuth(profile=own_profile, key=own_profile.auth)
-    own_key.save()
-    return HttpResponse("New Key generated")
-
-@csrf_exempt
-def valid_profile(request, token):
-    own_profile = Profile.objects.get(token=token)
-    own_auth = SecureAuth.objects.get(profile=own_profile)
-    received_json_data = json.loads(request.body.decode('utf-8'))
-    object_auth = received_json_data['profile']
-    if own_profile and own_auth.key == str(object_auth):
-        return HttpResponse("Valid")
-    else:
-        return HttpResponse("Invalid")
 
 # Only add element if it the page has been visited for more than 5 seconds without coming back to origin.
 def handle_browsing_mistake(profile, base_uri):
@@ -283,95 +266,6 @@ def get_suggestion(request, token):
             context = {'base': "Token Issue", 'recommendation': "Authentication Token or Key do not match"}
             return render(request, 'suggestions.json', context)
 
-def UI_UU_mixed_filtering(base_uri, token, pageobjectIndex_tokens, itemIndex_distance):
-    """ User_Item and User-User mixing Method
-    Args:
-        token (string): Profile Token
-        base_uri(string): Website hostname
-        pageobjectIndex_tokens(Dictionary<Integer,Array<tokens>>): Tokens for a pageobject
-        itemIndex_distance(Integer,Float): given value for an index of the pageobject within the received list.
-        
-    Returns:
-        Ordered array of recommended received clickables indexs
-    """
-    itemIndex_UU_Distance = {}
-    # If neo4j wasn't accessible warn the User.
-    error_flag = ""
-    try: 
-        pageobjectIndex_UUValues = {}
-        for e in pageobjectIndex_tokens.keys():
-            # Initialise the value of the User-User website based filtering
-            uuweb_pageobject_val = 0.0
-            # Retrieve Dictionary value corresponding visited the users webpage
-            UU_w = UU_websites(token, base_uri)
-            if(pageobjectIndex_tokens[e] == None):
-                pageobjectIndex_UUValues[e] = 0.0
-            else:
-                # we add all the values retrieve from UU_websites
-                for t in pageobjectIndex_tokens[e]:
-                    if not UU_websites(token, base_uri).get(t) == None:
-                        uuweb_pageobject_val = uuweb_pageobject_val + float(UU_w[t])
-                pageobjectIndex_UUValues[e] = uuweb_pageobject_val
-
-        for i in itemIndex_distance.keys():
-            # As the Stronger the User-User value for one page object the more it should contribute
-            # to a smaller itemIndex_value
-            itemIndex_UU_Distance[i] = itemIndex_distance[i]*(1.0-pageobjectIndex_UUValues[i])
-            # As the list might no longer be sorted we, sort the list once more
-        itemIndex_UU_Distance = sorted(itemIndex_distance.items(), key=itemgetter(1))
-        # UI_UU base filtering.
-        recommendation_with_UU = [i[0] for i in itemIndex_UU_Distance]
-    except:
-        # If the developer has not connected the neo4j server
-        # We do not compromise minimum service.
-        error_flag = 1
-        recommendation_with_UU = itemIndex_distance
-    sent_recommendation = []
-    for i in recommendation_with_UU:
-        if i not in sent_recommendation:
-            sent_recommendation.append(i)
-    return (sent_recommendation, error_flag)
-
-def UU_websites(token, base_uri):
-    """ User-User Demographic based method
-    
-    Args:
-        token (string): Profile Token
-        base_uri(string): Web page href
-
-    Returns:
-        Dictionary {token: rank/(profile_number) }
-    """
-    # Array of tokens, values and Dictionary of the matching items.
-    uu_tokens = []
-    uu_vals = []
-    UU_map = {}
-    # Using the cypher query in ProfileN giving for each returing token a number of common websites
-    matching_profile_website_query = ProfileN.nodes.get(token=token).get_tokens_from_common_Websites(page=base_uri)[0]
-    # Number of profiles
-    profile_numbers= len(matching_profile_website_query)
-    # Converting to arrays so that we can hold indexs while applying a simple normalisation
-    for o in matching_profile_website_query:
-        tok = o[0].properties['token']
-        nb = o[1]
-        uu_tokens.append(tok)
-        uu_vals.append(nb)
-
-    # Normalising the array of values
-    if(len(uu_vals) != 0):
-        uu_vals = [uu_vals]
-        uu_vals = normalize(uu_vals, axis=1)
-        uu_vals = uu_vals[0]
-
-    # Mapping a normalised and standardaised value
-    for idx, token in enumerate(uu_tokens):
-        # As it may be possible to have more than one profile for the same pageobject
-        # To keep a normalised structure (value in the range of [0.0,1.0] )
-        # WE devide by the number of existing profiles.
-        tp = uu_vals[idx]*(1.0/float(profile_numbers))
-        UU_map[token] = tp
-    return UU_map
-
 @csrf_exempt
 # Href unique constraint violation
 def populate_selectable(request, token):
@@ -422,6 +316,28 @@ def populate_selectable(request, token):
         else:
             context = { 'error' : 'not_activated'}
         return render(request, 'selectable_addition.json', context)
+
+# ---- Profile Related section ----
+@csrf_exempt
+def keygen(request, key):
+    own_profile = Profile.objects.get(token=key)
+    own_key = SecureAuth(profile=own_profile, key=own_profile.auth)
+    own_key.save()
+    return HttpResponse("New Key generated")
+
+@csrf_exempt
+def valid_profile(request, token):
+    try:
+        own_profile = Profile.objects.get(token=token)
+        own_auth = SecureAuth.objects.get(profile=own_profile)
+        received_json_data = json.loads(request.body.decode('utf-8'))
+        object_auth = received_json_data['profile']
+    except (Profile.DoesNotExist):
+        return HttpResponse("Invalid")
+    if own_profile and own_auth and own_auth.key == str(object_auth):
+        return HttpResponse("Valid")
+    else:
+        return HttpResponse("Invalid")
 
 @csrf_exempt
 def get_initial_auth(request, token):

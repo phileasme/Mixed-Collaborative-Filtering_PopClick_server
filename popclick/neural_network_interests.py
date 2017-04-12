@@ -1,8 +1,15 @@
 from numpy import exp, array, random, dot
 import numpy as np
+from sklearn.preprocessing import normalize
 import itertools
 
-class NeuralNetwork():
+class ArtificialNeuralNetwork():
+    """ 
+    Permutating only around unique permutations for a subset of length -1
+    
+    Params:
+        weights
+    """
     def __init__(self):
         # Seed the random number generator, so it generates the same numbers
         # every time the program runs.
@@ -32,13 +39,13 @@ class NeuralNetwork():
             # This means inputs, which are zero, do not cause changes to the weights.
             adjustment = np.dot(t_inputs.T, error * self.__sigmoid_and_deriv(output, deriv=True))
 
-            # Adjust the weights.
-            self.synaptic_weights += adjustment
+            # Adjust the synaptic weights.
+            self.weights += adjustment
 
     # The neural network thinks.
     def think(self, inputs):
         # Pass inputs through our neural network (our single neuron).
-        return self.__sigmoid_and_deriv(dot(inputs, self.synaptic_weights))
+        return self.__sigmoid_and_deriv(np.dot(inputs, self.weights))
 
 def fuzzy_permutation(input_output):
     """ 
@@ -47,9 +54,9 @@ def fuzzy_permutation(input_output):
     Args:
         input_output (Array<Float>): An Array of interests
     Returns:
-       (list_input, list_output)(tuple2<Array): The input layers and output layers
+       (list_input, list_output)(tuple2<Array,Array>): The input layers and output layers under a tuple
     """
-    # All
+    # (acts as input)
     la = input_output[0:-1]
     # Last element of the array (acts as output)
     lb = input_output[-1]
@@ -65,8 +72,8 @@ def fuzzy_permutation(input_output):
     return (list_input, list_output)
 
 def initialise_train_result(input_i, output_i, think_input):
-    neural_network = NeuralNetwork()
-    neural_network.synaptic_weights = np.array(2 * random.random((len(think_input), 1)) - 1)
+    neural_network = ArtificialNeuralNetwork()
+    neural_network.weights = np.array(2 * random.random((len(think_input), 1)) - 1)
     t_inputs = np.array(input_i)
     t_outputs = np.array(output_i)
     neural_network.train(t_inputs, t_outputs, 2000)
@@ -76,6 +83,7 @@ def initialise_train_result(input_i, output_i, think_input):
 def runNN(selectables_interests=[[0.0, 0.1, 0.6, 0.7], [0.0, 0.5, 0.6, 1]], profile_interests = [0.0, 0.1, 0.2, 0.3]):
     #Intialise a single neuron neural network.
     # From selections
+    selectables_interests = normalize(selectables_interests, axis=0, norm='l1')
     Interest_Array_Inputs = [[] for i in range(len(selectables_interests[0]))]
     Interest_Array_Outputs = [[] for i in range(len(selectables_interests[0]))]
     for ida, ll in enumerate(selectables_interests):
