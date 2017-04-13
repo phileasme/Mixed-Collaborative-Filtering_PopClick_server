@@ -38,18 +38,19 @@ def UI_UU_mixed_filtering(base_uri, token, pageobjectIndex_tokens, itemIndex_dis
             # to a smaller itemIndex_value
             itemIndex_UU_Distance[i] = itemIndex_distance[i]*(1.0-pageobjectIndex_UUValues[i])
             # As the list might no longer be sorted we, sort the list once more
-        itemIndex_UU_Distance = sorted(itemIndex_distance.items(), key=itemgetter(1))
         # UI_UU base filtering.
-        recommendation_with_UU = [i[0] for i in itemIndex_UU_Distance]
+        recommendation = itemIndex_UU_Distance
     except:
         # If the developer has not connected the neo4j server
         # We do not compromise minimum service.
         error_flag = 1
-        recommendation_with_UU = itemIndex_distance
+        recommendation = itemIndex_distance
+    # Sorted list of distances
+    sorted_index = sorted(recommendation, key=itemIndex_distance.get)
     sent_recommendation = []
-    for i in recommendation_with_UU:
-        if i not in sent_recommendation:
-            sent_recommendation.append(i)
+    for item_index in sorted_index:
+        if  item_index not in sent_recommendation:
+            sent_recommendation.append(item_index)
     return (sent_recommendation, error_flag)
 
 def UU_websites(token, base_uri):

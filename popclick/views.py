@@ -237,8 +237,6 @@ def get_suggestion(request, token):
                     for columns in range(complete_matrix.shape[1]):
                         current_row += np.square(own_porfile_properties[columns]-complete_matrix.item(rows,columns))
                     profile_po_distance.append((po_indexs[rows],(np.sqrt(current_row))))
-                # Sorted list of distances
-                profile_po_distance = sorted(profile_po_distance, key=itemgetter(1))
 
                 # Transform the dictionary to a sorted list of items mapped 
                 # to the originally received clickable indexs
@@ -255,7 +253,8 @@ def get_suggestion(request, token):
 
                 final_received_clickables_ranked_indexs = User_Item_and_User_User_demographic[0]
                 error_flag = User_Item_and_User_User_demographic[1]
-                context = {'base':base_uri , 'recommendation': final_received_clickables_ranked_indexs, 'error': error_flag}
+
+                context = {'base':base_uri, 'recommendation': final_received_clickables_ranked_indexs, 'error': error_flag}
 
             except (Page.DoesNotExist):
                 context = {'base': base_uri, 'recommendation': "No known objects"}
@@ -287,12 +286,16 @@ def populate_selectable(request, token):
             object_operation =  object_interaction[0]
             object_clicks = object_interaction[1]
             if "localhost:" not in object_page:
-                handle_Website(object_website)
-                page = handle_Page(object_website, object_page_path, object_page)
-                pageobject = handle_PageObject(object_selector, object_href, object_page, object_text)
-                handle_visit(profile, page)
-                profile_pageobject = handle_Profile_PageObject(profile, pageobject)
-                handle_PageobjectLog(profile, pageobject)
+                try:
+                    handle_Website(object_website)
+                    page = handle_Page(object_website, object_page_path, object_page)
+                    pageobject = handle_PageObject(object_selector, object_href, object_page, object_text)
+                    handle_visit(profile, page)
+                    profile_pageobject = handle_Profile_PageObject(profile, pageobject)
+                    handle_PageobjectLog(profile, pageobject)
+                except:
+                    context = {'inter' : 'data_corruption'}
+                    return render(request, 'selectable_addition.json', context)
                 try:
                     with neodb.transaction:
                         websiten = WebsiteN.get_or_create({'host': ''+object_website})
@@ -345,11 +348,14 @@ def get_initial_auth(request, token):
         profile = Profile.objects.get(token=token)
         secure_auth = SecureAuth.objects.get(profile=profile).key
         if profile.activated == False:
-            context = { 'auth' : secure_auth }
             profile.activated = True
             profile.save()
-            with neodb.transaction:
-                profilen = ProfileN.get_or_create({'token': ''+profile.token})
+            try:
+                with neodb.transaction:
+                    profilen = ProfileN.get_or_create({'token': ''+profile.token})
+            except:
+                ""
+            context = { 'auth' : secure_auth }
         else:
             context = { 'auth' : '' }
         return render(request, 'auth.json', context)
