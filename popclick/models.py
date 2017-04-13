@@ -5,9 +5,10 @@ from django.utils import timezone
 from fernet_fields import EncryptedTextField
 from django_neomodel import DjangoNode
 from neomodel import (StructuredNode, StringProperty, IntegerProperty,
-    UniqueIdProperty, RelationshipTo, RelationshipFrom)# Models are underneath
+    UniqueIdProperty, RelationshipTo, RelationshipFrom)
 from neomodel import config as neoconfig
 from django.db import transaction, IntegrityError
+
 neoconfig.DATABASE_URL = 'bolt://admin:totalrecall@localhost:7687'
 
 class Interest(models.Model):
@@ -106,17 +107,6 @@ class ProfileInterest(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)    
     interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
     level = models.FloatField(default=1)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    class Meta:
-        unique_together = ('profile','interest',)
-    def __str__(self):
-        return self.profile.token+' '+self.interest.name+' '+str(self.level)
-
-class ProfileVirtualInterest(models.Model):
-    profile = models.ForeignKey(Profile, on_delete=models.CASCADE)    
-    interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
-    level = models.IntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:

@@ -31,12 +31,12 @@ def learn_interests(profile, pageobject):
         set_profile_interests(profile, runNN(matrix_pageobjects_interests, profile_formatted), interests)
 
 def set_profile_interests(profile, new_profile_interests, interests):
-    default_learning_curve= 0.8
+    default_learning_curve= 0.96
     for index, interest_name in enumerate(interests):
         interest = Interest.objects.get(name=interest_name)
         profile_interest, created = ProfileInterest.objects.get_or_create(profile=profile, interest=interest)
         if created:
-            profile_interest.level = 0.0 +(1-default_learning_curve)*new_profile_interests[index]
+            profile_interest.level = (1-default_learning_curve)*new_profile_interests[index]
         else:
             profile_interest.level = default_learning_curve*profile_interest.level + (1-default_learning_curve)*new_profile_interests[index]
         profile_interest.save()

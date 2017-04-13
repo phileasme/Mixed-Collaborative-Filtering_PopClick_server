@@ -49,7 +49,7 @@ def handle_browsing_mistake(profile, base_uri):
 # Profile and User-User Demographic Based Collaborative filtering
 @csrf_exempt
 def get_suggestion(request, token):
-    """ For a given token
+    """ Get suggestions for a given token
     
     Args:
         token (string): Profile Token
@@ -250,24 +250,39 @@ def get_suggestion(request, token):
 
                 # ProfileBased and UU Demographic filtering
                 User_Item_and_User_User_demographic = UI_UU_mixed_filtering(base_uri, token, pageobjectIndex_tokens, itemIndex_distance)
-
+                # Sorted index list
                 final_received_clickables_ranked_indexs = User_Item_and_User_User_demographic[0]
+                # error_flag if any, depending on if neo4j is available
                 error_flag = User_Item_and_User_User_demographic[1]
-
+                # To be sent content with recommendation
                 context = {'base':base_uri, 'recommendation': final_received_clickables_ranked_indexs, 'error': error_flag}
-
+            # Exception thrown if no page is available
             except (Page.DoesNotExist):
+                # To be sent content with warning
                 context = {'base': base_uri, 'recommendation': "No known objects"}
+            # Key violation caused by the user
             except KeyError as e:
+                # To be sent content with warning
                 context = {'base': base_uri, 'recommendation': "Cross matching issue"}
+            #  Render the created content in the form of a json file
             return render(request, 'suggestions.json', context)
         else:
+            # If the user is not authenticated throw an error
             context = {'base': "Token Issue", 'recommendation': "Authentication Token or Key do not match"}
             return render(request, 'suggestions.json', context)
 
 @csrf_exempt
-# Href unique constraint violation
 def populate_selectable(request, token):
+    """ populates the given selectable as well as classes involved for the creation of the pageobject relation
+    
+    Args:
+        token (string): Profile Token
+    Received Data:
+        JSON Object: {local operation, page, profile, object_pageobject}
+
+    Returns:
+        Render response giving a confirmation that some action has taken place
+    """
     if request.method == 'POST':
         received_json_data = json.loads(request.body.decode('utf-8'))
         object_profile = received_json_data['profile']
@@ -330,6 +345,16 @@ def keygen(request, key):
 
 @csrf_exempt
 def valid_profile(request, token):
+    """ Get suggestions for a given token
+    
+    Args:
+        token (string): Profile Token
+    Received Data:
+        JSON File: {auth}
+
+    Returns:
+        HttpResponse(String)
+    """
     try:
         own_profile = Profile.objects.get(token=token)
         own_auth = SecureAuth.objects.get(profile=own_profile)
@@ -344,6 +369,14 @@ def valid_profile(request, token):
 
 @csrf_exempt
 def get_initial_auth(request, token):
+    """ Requesting an authentication code for a specific token
+    
+    Args:
+        token (string): Profile Token
+
+    Returns:
+        JSON File: {auth} auth.json
+    """
     if request.method == 'GET':
         profile = Profile.objects.get(token=token)
         secure_auth = SecureAuth.objects.get(profile=profile).key
@@ -394,6 +427,14 @@ def create_profile(request):
 
 # A profile must have a valid age, gender, logtime and at least 3 interests.
 def profile_create_check(json_object, Interests):
+    """ Verifies that a profile is valie
+    
+    Args:
+        (JSON OBJECT): json_object contains user submitted profile
+        (Interests): All the existing interest's names
+    Returns:
+        ERROR code or number of interests selected
+    """
     # The json attributes must be the following
     if {"age", "gender", "logtime", "interests", "signed"} <= json_object.keys():
         # The user must be at least 3 years old and valid.
@@ -423,6 +464,14 @@ def profile_create_check(json_object, Interests):
 
 # If the element can be represented as an integer
 def RepresentsInt(s):
+    """ Integer representation
+    
+    Args:
+        (object): s
+
+    Returns:
+        int(s)
+    """
     try: 
         int(s)
         return True
@@ -430,6 +479,10 @@ def RepresentsInt(s):
         return False
 
 def randToken():
+    """ Random token generator
+    Returns:
+        (string)
+    """
     a = '0123456789abcdefghijklmnopqrstuvxyzABCDEFGHIJKLMNOPQRSTUVXYZ'
     return "".join([rand.choice(a) for _ in range(20)])
 

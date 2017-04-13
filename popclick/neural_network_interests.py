@@ -100,4 +100,3 @@ def runNN(selectables_interests=[[0.0, 0.1, 0.6, 0.7], [0.0, 0.5, 0.6, 1]], prof
         collected_interests.append(initialise_train_result(Interest_Array_Inputs[i], Interest_Array_Outputs[i], profile_Interest_Inputs[i]))
     well_ordered_interests = collected_interests[::-1]
     return well_ordered_interests
-# runNN()
