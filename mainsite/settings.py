@@ -8,22 +8,18 @@ https://docs.djangoproject.com/en/dev/topics/settings/
 
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/dev/ref/settings/
-"""
-from mainsite.privates import *
+# """
+# from mainsite.privates import *
 import os
 from neomodel import db
 from neomodel import config as neoconfig
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# NEOMODEL_NEO4J_BOLT_URL = os.environ.get('NEO4J_BOLT_URL', 'bolt://neo4j:test@localhost:7474')
 
-# NEOMODEL_NEO4J_BOLT_URL = 'bolt://admin:totalrecall@localhost:7687'
-# db.set_connection(NEOMODEL_NEO4J_BOLT_URL)
+# Required for the neo4j connection2
 neoconfig.DATABASE_URL = 'bolt://admin:totalrecall@localhost:7687'
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/dev/howto/deployment/checklist/
-
+# Key used for the encryption
 FERNET_KEYS = [
     "b'dU67lGCoPdl8X-cThqNVseuQslyc47zDeAC8J3Lalx8='"
 ]
@@ -40,8 +36,8 @@ CORS_ORIGIN_WHITELIST = (
     'localhost',
     '127.0.0.1'
 )
-# Application definition
 
+# Application definition
 INSTALLED_APPS = [
     'django_neomodel',
     'corsheaders',
@@ -85,9 +81,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'mainsite.wsgi.application'
 
-# Database
-# https://docs.djangoproject.com/en/dev/ref/settings/#databases
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -99,8 +92,6 @@ GRAPH_MODELS = {
   'all_applications': True,
   'group_models': True,
 }
-# Password validation
-# https://docs.djangoproject.com/en/dev/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {

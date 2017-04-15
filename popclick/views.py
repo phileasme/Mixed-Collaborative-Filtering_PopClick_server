@@ -1,49 +1,75 @@
+""" 
+* ©Copyrights, all rights reserved at the exception of the used libraries.
+* @author: Phileas Hocquard 
+The View file is responsible for handling Web Requests
+"""
+
 from __future__ import division
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseNotFound
 from django.http import StreamingHttpResponse
+import requests
+import json
 import random as rand
 from django.core import serializers
 from datetime import datetime
 from django.utils import timezone
 import time
-import requests
-import json
+from django.db import transaction, IntegrityError
 from django.db.models import Q
 from django.db import IntegrityError
 from .models import Interest, PageobjectInterest, Visit, Website, SecureAuth, Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
 from neomodel import (StructuredNode, StringProperty, IntegerProperty,
         RelationshipTo, RelationshipFrom)
 from neomodel import db as neodb
+from neomodel import config as neoconfig
 from .models import PageN, WebsiteN, ProfileN
+
 from django.db.models import Max, Min
 from numpy import *
 import numpy as np
 from operator import itemgetter
 from sklearn.preprocessing import normalize
 from sklearn import preprocessing
-from neomodel import config as neoconfig
 from iteration_utilities import unique_everseen
+
 from popclick.populating import *
 from popclick.interest_learning import *
 from popclick.UU_based_filtering import *
+
 import threading
 
+# index page of the application
 def index(request):
+    """ A simple HTTP request to verify that a connection is available with the server
+    Return (HttpRespons(string))
+    """
     return HttpResponse("Online Check.")
 
 # Only add element if it the page has been visited for more than 5 seconds without coming back to origin.
 def handle_browsing_mistake(profile, base_uri):
+    """ Verifying if a recent ProfilePageobject should be removed
+    
+    Args:
+        profile (Profile): given profile
+        base_uri (string): the visited web page of a potential pageobject
+    """
+    # Retreiving last ProfilePageobject relation
     last_object_visited_by_profile = ProfilePageobject.objects.filter(profile=profile).last()
     if last_object_visited_by_profile != None:
+        # The visited uri of the last destination taken by a pageobject
         l_o_v_b_p_href = last_object_visited_by_profile.pageobject.href
+        # The pageobject page source
         l_o_v_b_p_page_href = last_object_visited_by_profile.pageobject.page.href
         l_o_v_b_p_time = last_object_visited_by_profile.created_at
         if l_o_v_b_p_href != l_o_v_b_p_page_href and last_object_visited_by_profile.selections == 1:
+            # If the user has created the pageobject in a short time period
             if base_uri == l_o_v_b_p_page_href and (timezone.now() - l_o_v_b_p_time).total_seconds() < 5.0:
+                # If the profile is the only one having the pageobject as a relation, then remove it
                 if len(ProfilePageobject.objects.filter(profile=profile, pageobject=last_object_visited_by_profile.pageobject)) == 1:
                     last_object_visited_by_profile.pageobject.delete()
+                # Delete the Profilepageobject instance.
                 last_object_visited_by_profile.delete()
 
 # Profile and User-User Demographic Based Collaborative filtering
@@ -285,13 +311,20 @@ def populate_selectable(request, token):
     """
     if request.method == 'POST':
         received_json_data = json.loads(request.body.decode('utf-8'))
+        # Decompose the JSON object
         object_profile = received_json_data['profile']
         object_pageobject = received_json_data['pageobject']
         object_interaction = received_json_data['interaction']
         object_auth = object_profile[0]
         object_logtime = datetime.strptime(object_profile[1], r'%Y-%m-%d %H:%M')
-        profile = Profile.objects.get(token=token)
+        try:
+            profile = Profile.objects.get(token=token)
+        except (Profile.DoesNotExist):
+            context = {'inter' : 'e_profile_DoesNotExist'}
+            return render(request, 'selectable_addition.json', context)
+        # If the profile exists, its key is valid, and the profile is activated
         if profile and profile.activated and SecureAuth.objects.get(profile=profile).key == str(object_auth):
+            # Matching all json items from the object to an individual object
             object_website = object_pageobject[4]
             object_page_path = object_pageobject[5]
             object_page = object_pageobject[0]
@@ -300,17 +333,26 @@ def populate_selectable(request, token):
             object_selector = object_pageobject[3]
             object_operation =  object_interaction[0]
             object_clicks = object_interaction[1]
+            # We do not keep a recollection of activity done on the localhost.
             if "localhost:" not in object_page:
+                # If there isn't an attempt of data corruption
                 try:
+                    # Update or create each of the matching items
                     handle_Website(object_website)
                     page = handle_Page(object_website, object_page_path, object_page)
                     pageobject = handle_PageObject(object_selector, object_href, object_page, object_text)
                     handle_visit(profile, page)
                     profile_pageobject = handle_Profile_PageObject(profile, pageobject)
                     handle_PageobjectLog(profile, pageobject)
-                except:
-                    context = {'inter' : 'data_corruption'}
+                except IntegrityError:
+                    context = {'inter' : 'e_data_corruption'}
                     return render(request, 'selectable_addition.json', context)
+
+                # Starting a new thread to learn on profile interests having an updated/created pageobject
+                learning_thread = threading.Thread(target=learn_interests(profile, pageobject), args=(), kwargs={})
+                learning_thread.start()
+                
+                # If the neo server is disconnected
                 try:
                     with neodb.transaction:
                         websiten = WebsiteN.get_or_create({'host': ''+object_website})
@@ -323,24 +365,37 @@ def populate_selectable(request, token):
                         profilen.page.connect(pagen)
                         profilen.website.connect(websiten)
                 except:
-                    context = {'inter' : 'neo4j_Disconnected'}
+                    context = {'inter' : 'e_neo4j_Disconnected'}
                     return render(request, 'selectable_addition.json', context)
-                
-                learning_thread = threading.Thread(target=learn_interests(profile, pageobject), args=(), kwargs={})
-                learning_thread.start()
+                # Returning information concerning the action took
+                # This is formally for the developer of the plateform
+                # As it doens't reveal any sensitive information we may send this as a response
                 context = { 'prof':object_profile, 'obj':pageobject, 'inter':object_interaction}
             else:
+                # The item is from localhost
                 context = { 'storing': 'Refusing_to_store'}
         else:
+            # The account is not activated therefore we should not permit the creation of a pageobject
+            # as the object would be associated with their profile.
             context = { 'error' : 'not_activated'}
+        # Return a json file containing the defined context above
         return render(request, 'selectable_addition.json', context)
 
 # ---- Profile Related section ----
 @csrf_exempt
 def keygen(request, key):
+    """ Generates a new key for a given profile eventual making the previous unusable
+    Args:
+        key (string): Profile Token
+    Returns:
+        HttpResponse(string)
+    """
+    # Get the token & key
     own_profile = Profile.objects.get(token=key)
     own_key = SecureAuth(profile=own_profile, key=own_profile.auth)
+    # Save new key
     own_key.save()
+    # Return CONFIRMATION
     return HttpResponse("New Key generated")
 
 @csrf_exempt
@@ -356,18 +411,23 @@ def valid_profile(request, token):
         HttpResponse(String)
     """
     try:
+        # Get specific profile
         own_profile = Profile.objects.get(token=token)
         own_auth = SecureAuth.objects.get(profile=own_profile)
         received_json_data = json.loads(request.body.decode('utf-8'))
         object_auth = received_json_data['profile']
+    #  If there is in fact no known profile
     except (Profile.DoesNotExist):
         return HttpResponse("Invalid")
+    # The profile is active therefore validate response
     if own_profile and own_auth and own_auth.key == str(object_auth):
         return HttpResponse("Valid")
     else:
+        # The profile is either not active, authenticated.
         return HttpResponse("Invalid")
 
 @csrf_exempt
+# Send profile secure auth
 def get_initial_auth(request, token):
     """ Requesting an authentication code for a specific token
     
@@ -380,9 +440,11 @@ def get_initial_auth(request, token):
     if request.method == 'GET':
         profile = Profile.objects.get(token=token)
         secure_auth = SecureAuth.objects.get(profile=profile).key
+        # Make the profile active
         if profile.activated == False:
             profile.activated = True
             profile.save()
+            # Create Profile Node
             try:
                 with neodb.transaction:
                     profilen = ProfileN.get_or_create({'token': ''+profile.token})
@@ -391,10 +453,19 @@ def get_initial_auth(request, token):
             context = { 'auth' : secure_auth }
         else:
             context = { 'auth' : '' }
+        # Reutrn an auth if it wasn't previously given
         return render(request, 'auth.json', context)
 
 @csrf_exempt
+# As the name suggests, it creates a profile
 def create_profile(request):
+    """ Verifies that a profile is valie
+    
+    Received Data:
+        (JSON object): json_object
+    Returns:
+        Render create_profile.json{new_profile| profile_error}
+    """
     Interests = ['News & Media','Fashion','Tech',
     'Finance & Economics','Music','Cars','Sports','Games & Tech','Shopping','Literature','Travel','Arts','Social Awareness','Science','Movies & Theatre','Craft']
     if request.method == 'POST':
@@ -427,7 +498,7 @@ def create_profile(request):
 
 # A profile must have a valid age, gender, logtime and at least 3 interests.
 def profile_create_check(json_object, Interests):
-    """ Verifies that a profile is valie
+    """ Verifies that a profile is valid
     
     Args:
         (JSON OBJECT): json_object contains user submitted profile
@@ -438,7 +509,7 @@ def profile_create_check(json_object, Interests):
     # The json attributes must be the following
     if {"age", "gender", "logtime", "interests", "signed"} <= json_object.keys():
         # The user must be at least 3 years old and valid.
-        if not(RepresentsInt(json_object['age']) and int(json_object['age']) > 3 and int(json_object['age']) < 120):
+        if not (RepresentsInt(json_object['age']) and int(json_object['age']) > 3 and int(json_object['age']) < 120):
             return "INVALID_AGE"
         else:
             # The choosen gender of the individual must fall in following categories
@@ -446,9 +517,11 @@ def profile_create_check(json_object, Interests):
                 return "INVALID_GENDER"
             else:
                 try:
+                    # The contract must be signed
                     if json_object['signed'] != 1:
                         return "NOT_SIGNED"
                     own_interests = 0
+                    # The number of valid interests
                     for inter in json_object['interests']:
                         if inter in Interests:
                             own_interests+=1
@@ -456,10 +529,13 @@ def profile_create_check(json_object, Interests):
                     if not 3 <= own_interests < len(Interests):
                         return "WRONG_INTERESTS"
                     else:
+                        # The profile contains all the necessary criterias
                         return "VALIDATED"
                 except ValueError:
+                    # Wrong time format
                     return "WRONG_DATE_FORMAT"
     else:
+        # User fiddling
         return "MISSING_ATTRIBUTE"
 
 # If the element can be represented as an integer
@@ -487,6 +563,10 @@ def randToken():
     return "".join([rand.choice(a) for _ in range(20)])
 
 def profiles(request):
+    """ Displays Profiles
+    Return:
+        Render profiles.html{profile_interests, profiles, interests}
+    """
     profiles = Profile.objects.all()
     interests = Interest.objects.all()
     profile_interests = {}
@@ -501,4 +581,5 @@ def profiles(request):
             curr_int_names.append(each_int.name)
         profile_interests[each_prof.token] = curr_int_names
     context = { 'profile_interests': profile_interests, 'profiles': profiles, 'interests': interests}
+    # Return html displaying most relevant information about all profiles
     return render(request, 'profiles.html', context)

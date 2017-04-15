@@ -9,8 +9,6 @@ from neomodel import (StructuredNode, StringProperty, IntegerProperty,
 from neomodel import config as neoconfig
 from django.db import transaction, IntegrityError
 
-neoconfig.DATABASE_URL = 'bolt://admin:totalrecall@localhost:7687'
-
 class Interest(models.Model):
     name = models.CharField(max_length=200, primary_key=True, unique=True)
     def __str__(self):
@@ -44,10 +42,12 @@ class Website(models.Model):
 class Page(models.Model):
     website = models.ForeignKey(Website, on_delete=models.CASCADE)
     path = models.CharField(max_length=2080)
-    href = models.CharField(unique=True, max_length=2083)
+    href = models.CharField(max_length=2083)
     profiles = models.ManyToManyField(Profile)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        unique_together = ('website','path','href')
     def __str__(self):
         return self.href
 
