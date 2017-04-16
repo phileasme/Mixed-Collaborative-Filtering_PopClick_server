@@ -1,13 +1,21 @@
-import datetime
-
+""" 
+* ©Copyrights, all rights reserved at the exception of the used libraries.
+* @author: Phileas Hocquard 
+* Database Model class representation file
+* Location : /mainsite/popclick/models.py
+"""
+# Database models
 from django.db import models
-from django.utils import timezone
-from fernet_fields import EncryptedTextField
 from django_neomodel import DjangoNode
 from neomodel import (StructuredNode, StringProperty, IntegerProperty,
     UniqueIdProperty, RelationshipTo, RelationshipFrom)
 from neomodel import config as neoconfig
 from django.db import transaction, IntegrityError
+# Time environment
+from django.utils import timezone
+import datetime
+# Introduction to an encrypted field
+from fernet_fields import EncryptedTextField
 
 class Interest(models.Model):
     name = models.CharField(max_length=200, primary_key=True, unique=True)

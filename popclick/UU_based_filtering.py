@@ -1,4 +1,11 @@
-from .models import Interest, PageobjectInterest, Visit, Website, SecureAuth, Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
+""" 
+* ©Copyrights, all rights reserved at the exception of the used libraries.
+* @author: Phileas Hocquard 
+* User to User demographic based filtering
+* Location : /mainsite/popclick/UU_based_filtering.py
+"""
+from .models import Interest, PageobjectInterest, Visit, Website, SecureAuth
+from .models import Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
 from neomodel import (StructuredNode, StringProperty, IntegerProperty,
         RelationshipTo, RelationshipFrom)
 from .models import PageN, WebsiteN, ProfileN

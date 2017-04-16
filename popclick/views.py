@@ -1,43 +1,52 @@
 """ 
 * ©Copyrights, all rights reserved at the exception of the used libraries.
 * @author: Phileas Hocquard 
-The View file is responsible for handling Web Requests
+* The View file is responsible for handling Web Requests
+* Location : /mainsite/popclick/views.py
 """
 
+# division operation
 from __future__ import division
+# Request handling
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseNotFound
 from django.http import StreamingHttpResponse
 import requests
 import json
-import random as rand
-from django.core import serializers
+# Time related expression
 from datetime import datetime
 from django.utils import timezone
 import time
+# data handling
 from django.db import transaction, IntegrityError
 from django.db.models import Q
-from django.db import IntegrityError
-from .models import Interest, PageobjectInterest, Visit, Website, SecureAuth, Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
+# Import model classes
+from .models import Interest, PageobjectInterest, Visit, Website, SecureAuth
+from .models import Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
+from .models import PageN, WebsiteN, ProfileN
+# Neomodels field, relations and object representation
 from neomodel import (StructuredNode, StringProperty, IntegerProperty,
         RelationshipTo, RelationshipFrom)
+# Neomodel configurations
 from neomodel import db as neodb
 from neomodel import config as neoconfig
-from .models import PageN, WebsiteN, ProfileN
-
+# Operations
+from django.core import serializers
 from django.db.models import Max, Min
-from numpy import *
+import random as rand
+# Third party used libraries / Operations
 import numpy as np
+from numpy import *
 from operator import itemgetter
 from sklearn.preprocessing import normalize
 from sklearn import preprocessing
 from iteration_utilities import unique_everseen
-
+# External Methods and classes
 from popclick.populating import *
 from popclick.interest_learning import *
 from popclick.UU_based_filtering import *
-
+# Allows async task
 import threading
 
 # index page of the application
@@ -67,7 +76,8 @@ def handle_browsing_mistake(profile, base_uri):
             # If the user has created the pageobject in a short time period
             if base_uri == l_o_v_b_p_page_href and (timezone.now() - l_o_v_b_p_time).total_seconds() < 5.0:
                 # If the profile is the only one having the pageobject as a relation, then remove it
-                if len(ProfilePageobject.objects.filter(profile=profile, pageobject=last_object_visited_by_profile.pageobject)) == 1:
+                if len(ProfilePageobject.objects.filter(profile=profile,
+                    pageobject=last_object_visited_by_profile.pageobject)) == 1:
                     last_object_visited_by_profile.pageobject.delete()
                 # Delete the Profilepageobject instance.
                 last_object_visited_by_profile.delete()
@@ -157,7 +167,8 @@ def get_suggestion(request, token):
 
                     # Normalising selectable value per pageobject
                     for pr_po in profiles_pageobjects.filter(profile=profile):
-                        nm_pg_select[str(pr_po.id)] = float(pr_po.selections-int(lowest_nb_selections))/float(int(highest_nb_selections)-int(lowest_nb_selections))
+                        nm_pg_select[str(pr_po.id)] = float(pr_po.selections-int(lowest_nb_selections))/float(
+                                int(highest_nb_selections)-int(lowest_nb_selections))
 
                     nm_pr_ages[str(profile.id)] = float((profile.age-lowest_age)/(highest_age-lowest_age))
                     
@@ -354,6 +365,8 @@ def populate_selectable(request, token):
                 
                 # If the neo server is disconnected
                 try:
+                    # Create new nodes for each object.
+                    # Get or create is applied as neo_4j interruptions may happen.
                     with neodb.transaction:
                         websiten = WebsiteN.get_or_create({'host': ''+object_website})
                         pagen = PageN.get_or_create({'href': object_href})
@@ -467,7 +480,8 @@ def create_profile(request):
         Render create_profile.json{new_profile| profile_error}
     """
     Interests = ['News & Media','Fashion','Tech',
-    'Finance & Economics','Music','Cars','Sports','Games & Tech','Shopping','Literature','Travel','Arts','Social Awareness','Science','Movies & Theatre','Craft']
+    'Finance & Economics','Music','Cars','Sports','Games & Tech','Shopping','Literature',
+    'Travel','Arts','Social Awareness','Science','Movies & Theatre','Craft']
     if request.method == 'POST':
         # JSON decode error handling
         received_json_data= json.loads(request.body.decode('utf-8'))
@@ -561,25 +575,3 @@ def randToken():
     """
     a = '0123456789abcdefghijklmnopqrstuvxyzABCDEFGHIJKLMNOPQRSTUVXYZ'
     return "".join([rand.choice(a) for _ in range(20)])
-
-def profiles(request):
-    """ Displays Profiles
-    Return:
-        Render profiles.html{profile_interests, profiles, interests}
-    """
-    profiles = Profile.objects.all()
-    interests = Interest.objects.all()
-    profile_interests = {}
-    for each_prof in profiles:
-        # Getting the interest of the profile
-        curr_interests = each_prof.interests.all()
-        # Create empty array
-        curr_int_names = []
-        # Iterate through the interests of the profile
-        for each_int in curr_interests:
-            # Append the to list of names
-            curr_int_names.append(each_int.name)
-        profile_interests[each_prof.token] = curr_int_names
-    context = { 'profile_interests': profile_interests, 'profiles': profiles, 'interests': interests}
-    # Return html displaying most relevant information about all profiles
-    return render(request, 'profiles.html', context)

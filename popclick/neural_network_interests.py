@@ -1,10 +1,20 @@
+""" 
+* ©Copyrights, all rights reserved at the exception of the used libraries.
+* @author: Phileas Hocquard 
+* Neural Network class and its running methods.
+* Location : /mainsite/popclick/neural_network_interests.py
+"""
+# Third party libraries
+# All used for Mathematical Operations / Third Party
 from numpy import exp, array, random, dot
 import numpy as np
 from sklearn.preprocessing import normalize
 import itertools
 
+# Neural Network class
 class ArtificialNeuralNetwork():
-    """     
+    """    
+    The single neuron, neural network.
     Params:
         weights : Weight of neural nets neuron
     """
@@ -90,9 +100,11 @@ def initialise_train_result(input_i, output_i, think_input):
     # Compute new single interest from the particular trained weight
     return neural_network.think(think_input)[0]
     
-#                                   Example of what is expected
+#                                   Example of what is expected.
 def runNN(selectables_interests=[[0.0, 0.1, 0.6, 0.7], [0.0, 0.5, 0.6, 1]], profile_interests = [0.0, 0.1, 0.2, 0.3]):
-    """ runNN runs 
+    """ runNN sets the multiple permutations required for the input and output layers,
+        and then calls the initial training_result method for the number of existing interests;
+        feeding PageobjectInterest's as an input and output for the training and the profile_interests for the usage.
     Args: 
         selectables_interests (2dArray) : Array containing pageobject interests
         profile_interests (Array) : Standardised representation of profil interests
@@ -108,9 +120,11 @@ def runNN(selectables_interests=[[0.0, 0.1, 0.6, 0.7], [0.0, 0.5, 0.6, 1]], prof
         # For the number of permutations
         current_fuzzy_element_permutation = fuzzy_permutation(ll)
         for index in range(len(current_fuzzy_element_permutation[0])):
+            # Insert array inside column Interest for the input, output.
             Interest_Array_Inputs[current_fuzzy_element_permutation[0][index][0]].append(current_fuzzy_element_permutation[0][index][1][:])
             Interest_Array_Outputs[current_fuzzy_element_permutation[1][index][0]].append([current_fuzzy_element_permutation[1][index][1]])
     profile_Interest_Inputs = []
+    # Creating the list of inputs (Leaving out an interest to be predicted)
     for index, inputList in enumerate(fuzzy_permutation(profile_interests)[0]):
         profile_Interest_Inputs.append(inputList[1])
 
@@ -119,4 +133,5 @@ def runNN(selectables_interests=[[0.0, 0.1, 0.6, 0.7], [0.0, 0.5, 0.6, 1]], prof
     for i in range(len(profile_interests)):
         collected_interests.append(initialise_train_result(Interest_Array_Inputs[i], Interest_Array_Outputs[i], profile_Interest_Inputs[i]))
     well_ordered_interests = collected_interests[::-1]
+    # Returns the outcoming interests.
     return well_ordered_interests

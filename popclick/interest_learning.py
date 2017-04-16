@@ -1,6 +1,15 @@
+""" 
+* ©Copyrights, all rights reserved at the exception of the mentioned 3rd party libraries.
+* @author: Phileas Hocquard 
+* Profile Learning, Interests formatting
+* Location : /mainsite/popclick/interest_learning.py
+"""
+# Database models
 from .models import Interest, PageobjectInterest, Visit, Website, SecureAuth, Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
-from numpy import exp, array, random, dot
+# Operations / Third party
 import numpy as np
+from numpy import exp, array, random, dot
+# External file import
 from popclick.neural_network_interests import *
 
 def get_formatted_user_or_pageobject_interests(profile_or_pageobject, query_profiles_interests=None):
