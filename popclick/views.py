@@ -21,6 +21,10 @@ import time
 # data handling
 from django.db import transaction, IntegrityError
 from django.db.models import Q
+# Import user model
+from django.contrib.auth.models import User
+# Authentication for admin users
+from django.contrib.auth import authenticate
 # Import model classes
 from .models import Interest, PageobjectInterest, Visit, Website, SecureAuth
 from .models import Page, Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
@@ -46,8 +50,10 @@ from iteration_utilities import unique_everseen
 from popclick.populating import *
 from popclick.interest_learning import *
 from popclick.UU_based_filtering import *
+# from popclick.tests import *
 # Allows async task
 import threading
+# For testing
 
 # index page of the application
 def index(request):
@@ -56,35 +62,6 @@ def index(request):
     """
     return HttpResponse("Online Check.")
 
-def UU_UI_mixed_real_test(request):
-    ""
-
-
-# Only add element if it the page has been visited for more than 5 seconds without coming back to origin.
-def handle_browsing_mistake(profile, base_uri):
-    """ Verifying if a recent ProfilePageobject should be removed
-    
-    Args:
-        profile (Profile): given profile
-        base_uri (string): the visited web page of a potential pageobject
-    """
-    # Retreiving last ProfilePageobject relation
-    last_object_visited_by_profile = ProfilePageobject.objects.filter(profile=profile).last()
-    if last_object_visited_by_profile != None:
-        # The visited uri of the last destination taken by a pageobject
-        l_o_v_b_p_href = last_object_visited_by_profile.pageobject.href
-        # The pageobject page source
-        l_o_v_b_p_page_href = last_object_visited_by_profile.pageobject.page.href
-        l_o_v_b_p_time = last_object_visited_by_profile.created_at
-        if l_o_v_b_p_href != l_o_v_b_p_page_href and last_object_visited_by_profile.selections == 1:
-            # If the user has created the pageobject in a short time period
-            if base_uri == l_o_v_b_p_page_href and (timezone.now() - l_o_v_b_p_time).total_seconds() < 5.0:
-                # If the profile is the only one having the pageobject as a relation, then remove it
-                if len(ProfilePageobject.objects.filter(profile=profile,
-                    pageobject=last_object_visited_by_profile.pageobject)) == 1:
-                    last_object_visited_by_profile.pageobject.delete()
-                # Delete the Profilepageobject instance.
-                last_object_visited_by_profile.delete()
 
 # Profile and User-User Demographic Based Collaborative filtering
 @csrf_exempt
@@ -104,11 +81,19 @@ def get_suggestion(request, token):
         received_json_data = json.loads(request.body.decode('utf-8'))
         object_auth = received_json_data['profile']
         #  Getting profile information
-        own_profile = Profile.objects.get(token=token)
-        own_key = SecureAuth.objects.get(profile=own_profile).key
+        try:
+            own_profile = Profile.objects.get(token=token)
+            own_key = SecureAuth.objects.get(profile=own_profile).key
+        except:
+            return HttpResponseNotFound('Invalid Profile') 
+
         # Making sure the profile is activated and in order
         if own_profile and own_profile.activated and own_key == str(object_auth):
             try:
+                # Remove all the pageobjects who do not have a relation with a profile.
+                PageObject.objects.exclude(id__in = ProfilePageobject.objects.values_list('pageobject__id', flat=True)).delete()
+                # PageObjectIntere
+                # if Pa
                 # Get last visit of user
                 # Get last selected element of user location href href
                 pageobjects = received_json_data['pageobjects']
@@ -294,8 +279,10 @@ def get_suggestion(request, token):
                 final_received_clickables_ranked_indexs = User_Item_and_User_User_demographic[0]
                 # error_flag if any, depending on if neo4j is available
                 error_flag = User_Item_and_User_User_demographic[1]
+                # Ranks
+                ranks = User_Item_and_User_User_demographic[2]
                 # To be sent content with recommendation
-                context = {'base':base_uri, 'recommendation': final_received_clickables_ranked_indexs, 'error': error_flag}
+                context = {'base':ranks, 'recommendation': final_received_clickables_ranked_indexs, 'error': error_flag}
             # Exception thrown if no page is available
             except (Page.DoesNotExist):
                 # To be sent content with warning
@@ -554,6 +541,53 @@ def profile_create_check(json_object, Interests):
     else:
         # User fiddling
         return "MISSING_ATTRIBUTE"
+        
+# Only add element if it the page has been visited for more than 5 seconds without coming back to origin.
+def handle_browsing_mistake(profile, base_uri):
+    """ Verifying if a recent ProfilePageobject should be removed
+    
+    Args:
+        profile (Profile): given profile
+        base_uri (string): the visited web page of a potential pageobject
+    """
+    # Retreiving last ProfilePageobject relation
+    try:
+        last_object_visited_by_profile = ProfilePageobject.objects.filter(profile=profile).last() 
+        if last_object_visited_by_profile != None and last_object_visited_by_profile.pageobject != None:
+            # The visited uri of the last destination taken by a pageobject
+            l_o_v_b_p_href = last_object_visited_by_profile.pageobject.href
+            # The pageobject page source
+            l_o_v_b_p_page_href = last_object_visited_by_profile.pageobject.page.href
+            l_o_v_b_p_time = last_object_visited_by_profile.created_at
+            if l_o_v_b_p_href != l_o_v_b_p_page_href and last_object_visited_by_profile.selections == 1:
+                # If the user has created the pageobject in a short time period
+                if base_uri == l_o_v_b_p_page_href and (timezone.now() - l_o_v_b_p_time).total_seconds() < 5.0:
+                    # If the profile is the only one having the pageobject as a relation, then remove it
+                    if len(ProfilePageobject.objects.filter(profile=profile,
+                        pageobject=last_object_visited_by_profile.pageobject)) == 1:
+                        last_object_visited_by_profile.pageobject.delete()
+                    # Delete the Profilepageobject instance.
+                    last_object_visited_by_profile.delete()
+    except PageObject.DoesNotExist:
+        # There is no existing block therefore we have no choice but to catch an exception
+        "No object object to remove"
+
+@csrf_exempt
+def destroy_profile(request, profile, auth):
+    """
+    Destroy profile on command.
+    Args:
+        (profile): token
+        (auth): SecureAuth.key
+    """
+    try:
+        own_profile = Profile.objects.get(token=profile)
+        own_key = SecureAuth.objects.get(profile=auth).key
+        if own_profile and own_key:
+            own_profile.delete()
+            return HttpResponse("Ok")
+    except:
+        return HttpResponseNotFound('<h1>Invalid Credentials</h1>')
 
 # If the element can be represented as an integer
 def RepresentsInt(s):

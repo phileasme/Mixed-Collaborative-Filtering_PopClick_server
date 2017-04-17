@@ -58,7 +58,7 @@ def UI_UU_mixed_filtering(base_uri, token, pageobjectIndex_tokens, itemIndex_dis
     for item_index in sorted_index:
         if  item_index not in sent_recommendation:
             sent_recommendation.append(item_index)
-    return (sent_recommendation, error_flag)
+    return (sent_recommendation, error_flag, recommendation)
 
 def UU_websites(token, base_uri):
     """ User-User Demographic based method

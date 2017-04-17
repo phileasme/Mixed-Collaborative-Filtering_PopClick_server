@@ -111,7 +111,11 @@ def runNN(selectables_interests=[[0.0, 0.1, 0.6, 0.7], [0.0, 0.5, 0.6, 1]], prof
     """
     #Intialise a single neuron neural network.
     # Apply vertical normalisation for the pageobject interests
-    selectables_interests = normalize(selectables_interests, axis=0, norm='l1')
+    if len(selectables_interests)>0:
+        selectables_interests = normalize(selectables_interests, axis=0, norm='l1')
+    else:
+        # If there is nothing to compare it to, return the current profile.
+        return profile_interests
     # For the given size of the first element in the array (number of interests) add a dimension of such size
     Interest_Array_Inputs = [[] for i in range(len(selectables_interests[0]))]
     Interest_Array_Outputs = [[] for i in range(len(selectables_interests[0]))]
