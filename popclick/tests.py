@@ -11,13 +11,19 @@ from django.test import TestCase, RequestFactory
 import json
 import requests
 from django.test import Client
+from time import sleep
+from subprocess import call
+from django.test.runner import DiscoverRunner
 
  ######### ######### ######### ######### ######### ######### ######## ###
- # Before running any test, the server must be running concurrently		#
+ # Before running any test, the server must be running concurrently:	#
+ #		python manage.py runserver	within python_server/mainsite		#
+ #																		#
  # Before running the tests using the recommendation live				#
  # Either type : curl -I https://immense-bastion-46341.herokuapp.com/ 	#
- #			     curl -I https://blooming-crag-27676.herokuapp.com/		#
- #				 or navigate to the urls listed above.					#
+ #			     curl -I https://glacial-beyond-99420.herokuapp.com/	#
+ #				 or navigate to the urls listed above,					#
+ #				This is necessary to produce a wakeup call				#
  ######### ######### ######### ######### ######### ######### ######## ###
 
 
@@ -36,6 +42,18 @@ def page_one(auth):
 	"https://www.ft.com/?edition=uk","FINANCIAL TIMES","html>body>div:eq(1)>div:eq(2)>a"],
 	["https://immense-bastion-46341.herokuapp.com/","","Close","html>body>div:eq(3)>div:eq(0)>a"]]})
 
+def page_two(auth):
+	return json.dump({"profile":auth,"pageobjects":[["https://glacial-beyond-99420.herokuapp.com/",
+		"http://www.freeminesweeper.org/","MINESWEEPER","html>body>div:eq(0)>div:eq(0)>a"],
+		["https://glacial-beyond-99420.herokuapp.com/","https://www.ferrari.com/","FERRARI","html>body>div:eq(0)>div:eq(1)>a"],
+		["https://glacial-beyond-99420.herokuapp.com/","http://www.lvbeethoven.com/Bio/BiographyLudwig.html","BEETHOVEN",
+		"html>body>div:eq(0)>div:eq(2)>a"],["https://glacial-beyond-99420.herokuapp.com/","https://www.shoes.com/","SHOES",
+		"html>body>div:eq(1)>div:eq(0)>a"],["https://glacial-beyond-99420.herokuapp.com/",
+		"https://en.wikipedia.org/wiki/La_Fontaine%27s_Fables","LA FONTAINE'S FABLES","html>body>div:eq(1)>div:eq(1)>a"],
+		["https://glacial-beyond-99420.herokuapp.com/","https://immense-bastion-46341.herokuapp.com/","WEBSITE 1",
+		"html>body>div:eq(1)>div:eq(2)>a"],["https://glacial-beyond-99420.herokuapp.com/","",
+		"Close","html>body>div:eq(3)>div:eq(0)>a"]]})
+
 def page_one_objects(auth,item):
 	object_list =[
 	{"profile":[auth,"2017-04-17 03:00"],
@@ -43,6 +61,7 @@ def page_one_objects(auth,item):
 	"https://www.football.com/","FOOTBALL","something",
 	"immense-bastion-46341.herokuapp.com","/"],
 	"interaction":["create",1]},
+
 	{"profile":[auth,"2017-04-17 03:02"],
 	"pageobject":["https://immense-bastion-46341.herokuapp.com/",
 	"https://www.bloomberg.com/quote/DXY:CUR","DOLLARS","something",
@@ -50,6 +69,27 @@ def page_one_objects(auth,item):
 	"interaction":["create",1]}
 	]
 	return json.dumps(object_list[item])
+
+def page_two_objects(auth, item):
+	object_list =[
+	{"profile":[auth,"2017-04-17 10:40"],
+	"pageobject":["https://glacial-beyond-99420.herokuapp.com/",
+	"http://www.freeminesweeper.org/","MINESWEEPER","something",
+	"glacial-beyond-99420.herokuapp.com","/"],
+	"interaction":["create",1]},
+
+	{"profile":[auth,"2017-04-17 10:43"],
+	"pageobject":["https://glacial-beyond-99420.herokuapp.com/",
+	"https://en.wikipedia.org/wiki/La_Fontaine%27s_Fables","LA FONTAINE'S FABLES","something",
+	"glacial-beyond-99420.herokuapp.com","/"],"interaction":["create",1]},
+
+	{"profile":[auth,"2017-04-17 10:42"],
+	"pageobject":["https://glacial-beyond-99420.herokuapp.com/",
+	"http://www.lvbeethoven.com/Bio/BiographyLudwig.html",
+	"BEETHOVEN","something","glacial-beyond-99420.herokuapp.com","/"],
+	"interaction":["create",1]}]
+	return json.dumps(object_list[item])
+
 class ProfileCreationTest(TestCase):
 	def setUp(self):
 		self.uri_creation = "/popclick/api/create/"
@@ -58,7 +98,7 @@ class ProfileCreationTest(TestCase):
 
 	def test_valid_profile_creation(self):
 		client = Client()
-		profile_json = json.dumps( {"logtime":"2017-04-16 18:07","age":"5","gender":"Male",
+		profile_json = json.dumps( {"logtime":"2017-02-10 10:00","age":"5","gender":"Male",
 			"interests":["Social Awareness","Movies & Theatre","Craft"],"signed":1})
 		r = client.post(self.uri_creation, content_type='application/json', data=profile_json)
 		profile_token = json.loads(r.content.decode('utf-8'))['profile']
@@ -66,7 +106,7 @@ class ProfileCreationTest(TestCase):
 
 	def test_invalid_profile_interests(self):
 		client = Client()
-		profile_json = json.dumps( {"logtime":"2017-04-16 18:07","age":"5","gender":"Male",
+		profile_json = json.dumps( {"logtime":"2017-02-10 10:00","age":"5","gender":"Male",
 			"interests":["Social Awareness","Bad Interests","Craft"],"signed":1})
 		r = client.post(self.uri_creation, content_type='application/json', data=profile_json)
 		error_made = json.loads(r.content.decode('utf-8'))
@@ -74,7 +114,7 @@ class ProfileCreationTest(TestCase):
 
 	def test_invalid_profile_age(self):
 		client = Client()
-		profile_json = json.dumps( {"logtime":"2017-04-16 18:07","age":"99900","gender":"Male",
+		profile_json = json.dumps( {"logtime":"2017-02-10 10:00","age":"99900","gender":"Male",
 			"interests":["Social Awareness","Literature","Craft"],"signed":1})
 		r = client.post(self.uri_creation, content_type='application/json', data=profile_json)
 		error_made = json.loads(r.content.decode('utf-8'))
@@ -82,7 +122,7 @@ class ProfileCreationTest(TestCase):
 
 	def test_invalid_profile_gender(self):
 		client = Client()
-		profile_json = json.dumps( {"logtime":"2017-04-16 18:07","age":"22","gender":"FAKE GENDER",
+		profile_json = json.dumps( {"logtime":"2017-02-10 10:00","age":"22","gender":"FAKE GENDER",
 			"interests":["Social Awareness","Literature","Craft"],"signed":1})
 		r = client.post(self.uri_creation, content_type='application/json', data=profile_json)
 		error_made = json.loads(r.content.decode('utf-8'))
@@ -90,7 +130,7 @@ class ProfileCreationTest(TestCase):
 
 	def test_profile_authentication_and_validated(self):
 		client = Client()
-		profile_json = json.dumps( {"logtime":"2017-04-16 18:07","age":"5","gender":"Male",
+		profile_json = json.dumps( {"logtime":"2017-02-10 10:00","age":"5","gender":"Male",
 			"interests":["Social Awareness","Movies & Theatre","Craft"],"signed":1})
 		r = client.post(self.uri_creation, content_type='application/json', data=profile_json)
 		profile_token = json.loads(r.content.decode('utf-8'))['profile']
@@ -106,7 +146,7 @@ class ProfilePageobjectPopulate(TestCase):
 		self.uri_add_selectable = "/api/add/"
 	def test_pageobject_creation(self):
 		client = Client()
-		profile_json = json.dumps( {"logtime":"2017-04-16 18:07","age":"5","gender":"Male",
+		profile_json = json.dumps( {"logtime":"2017-02-10 10:00","age":"5","gender":"Male",
 			"interests":["Social Awareness","Movies & Theatre","Craft"],"signed":1})
 		r = client.post(self.uri_creation, content_type='application/json', data=profile_json)
 		profile_token = json.loads(r.content.decode('utf-8'))['profile']
@@ -118,7 +158,7 @@ class ProfilePageobjectPopulate(TestCase):
 		 content_type='application/json', data=pageobject_json)
 		self.assertEqual(pageobject_created_r.status_code, 200)
 
-class GetRecommendation(TestCase):
+class GetRecommendation_and_NeuralNetwork(TestCase):
 	def setUp(self):
 		client = Client()
 		self.uri_creation = "/popclick/api/create/"
@@ -126,11 +166,11 @@ class GetRecommendation(TestCase):
 		self.uri_add_selectable = "/api/add/"
 		self.uri_suggestion = "/api/suggestion/"
 
-		bob_the_socialaware_twin_json = json.dumps( {"logtime":"2017-04-16 18:07","age":"18","gender":"Male",
-			"interests":["Social Awareness","Movies & Theatre","Craft"],"signed":1})
-		bob_the_artist_twin_json = json.dumps( {"logtime":"2017-04-16 18:07","age":"18","gender":"Male",
+		bob_the_socialaware_twin_json = json.dumps( {"logtime":"2017-02-10 10:00","age":"18","gender":"Male",
+			"interests":["Social Awareness","Travel","News & Media"],"signed":1})
+		bob_the_artist_twin_json = json.dumps( {"logtime":"2017-02-10 10:00","age":"18","gender":"Male",
 			"interests":["Literature","Movies & Theatre","Craft"],"signed":1})
-		alice_the_artist_json = json.dumps( {"logtime":"2017-04-16 18:07","age":"18","gender":"Female",
+		alice_the_artist_json = json.dumps( {"logtime":"2017-02-10 10:00","age":"18","gender":"Female",
 			"interests":["Literature","Arts","Craft"],"signed":1})
 		
 		bob_the_socialaware_twin_r = client.post(self.uri_creation, content_type='application/json', data=bob_the_socialaware_twin_json)
@@ -140,9 +180,11 @@ class GetRecommendation(TestCase):
 		bob_the_socialaware_twin_profile_token = json.loads(bob_the_socialaware_twin_r.content.decode('utf-8'))['profile']
 		bob_the_artist_twin_profile_token = json.loads(bob_the_artist_twin_r.content.decode('utf-8'))['profile']
 		alice_the_artist_profile_token = json.loads(alice_the_artist_r.content.decode('utf-8'))['profile']
+
 		self.bob_the_socialaware_twin_profile = Profile.objects.get(token=bob_the_socialaware_twin_profile_token)
 		self.bob_the_artist_twin_profile = Profile.objects.get(token=bob_the_artist_twin_profile_token)
 		self.alice_the_artist_profile = Profile.objects.get(token=alice_the_artist_profile_token)
+
 		self.bob_the_socialaware_twin_auth = json.loads(client.get(self.uri_auth+bob_the_socialaware_twin_profile_token+'/').content.decode('utf-8'))['auth']
 		self.bob_the_artist_twin_auth = json.loads(client.get(self.uri_auth+bob_the_artist_twin_profile_token+'/').content.decode('utf-8'))['auth']
 		self.alice_the_artist_auth = json.loads(client.get(self.uri_auth+alice_the_artist_profile_token+'/').content.decode('utf-8'))['auth']
@@ -179,9 +221,52 @@ class GetRecommendation(TestCase):
 
 		self.assertEqual(contx, 'No known objects')
 
-class NeuralNetwork(TestCase):
-	def setUp(self):
-		self.uri_creation = "/popclick/api/create/"
-		self.uri_auth = "/popclick/api/get/"
-		self.uri_add_selectable = "/api/add/"
-		self.uri_suggestion = "/api/suggestion/"
+		# Testing with the most interests in common despite all the other common factors
+	def test_get_suggestion_compare_interest_suggestion(self):
+		# Client type Request
+		client = Client()
+		# Bob the social aware has no interests in common with Bob the artist
+		# Bob the social aware selects a selectable item from page 1
+		client.post(self.uri_add_selectable+self.bob_the_socialaware_twin_profile.token+'/',
+		 content_type='application/json', data=page_one_objects(self.bob_the_socialaware_twin_auth, 0))
+		# Alice has a lot in common with bob the artist, but has a different gender.
+		# Alice selects another object
+		client.post(self.uri_add_selectable+self.alice_the_artist_profile.token+'/',
+		 content_type='application/json', data=page_one_objects(self.alice_the_artist_auth, 1))
+
+		bob_the_artist_twin_page1_suggestion = client.post(self.uri_suggestion+self.bob_the_artist_twin_profile.token+'/', 
+		 content_type='application/json', data=page_one(self.bob_the_artist_twin_auth))
+
+		contx = json.loads(bob_the_artist_twin_page1_suggestion.content.decode('utf-8'))['recommendation']
+		# First element of the given list
+		self.assertEqual(contx, '[1, 0]')
+
+	def test_neural_network_learning(self):
+		client = Client()
+		# Bob the social aware has no interests in common with Bob the artist
+		# Bob the social aware selects a selectable item from page 1
+		client.post(self.uri_add_selectable+self.bob_the_socialaware_twin_profile.token+'/',
+		 content_type='application/json', data=page_one_objects(self.bob_the_socialaware_twin_auth, 0))
+		# Alice has a lot in common with bob the artist, but has a different gender.
+		# Alice selects another object
+		client.post(self.uri_add_selectable+self.alice_the_artist_profile.token+'/',
+		 content_type='application/json', data=page_one_objects(self.alice_the_artist_auth, 1))
+
+		bob_the_artist_twin_page1_suggestion = client.post(self.uri_suggestion+self.bob_the_artist_twin_profile.token+'/', 
+		 content_type='application/json', data=page_one(self.bob_the_artist_twin_auth))
+
+		client.post(self.uri_add_selectable+self.bob_the_artist_twin_profile.token+'/',
+		 content_type='application/json', data=page_one_objects(self.bob_the_artist_twin_auth, 0))
+		self.assertTrue(0.0 < ProfileInterest.objects.get(profile=self.bob_the_artist_twin_profile, interest__name="Travel").level < 0.15)
+		self.assertTrue(1.0 > ProfileInterest.objects.get(profile=self.bob_the_artist_twin_profile, interest__name="Craft").level > 0.85)
+
+
+
+
+
+
+
+
+
+
+

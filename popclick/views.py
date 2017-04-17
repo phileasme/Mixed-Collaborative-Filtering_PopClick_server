@@ -56,6 +56,10 @@ def index(request):
     """
     return HttpResponse("Online Check.")
 
+def UU_UI_mixed_real_test(request):
+    ""
+
+
 # Only add element if it the page has been visited for more than 5 seconds without coming back to origin.
 def handle_browsing_mistake(profile, base_uri):
     """ Verifying if a recent ProfilePageobject should be removed
@@ -254,7 +258,6 @@ def get_suggestion(request, token):
                 
                 # Individual Row, Could be simplified to simply getting the actual user row in the matrix
                 standardized_own_profile_gender = [0]*(len(genders))
-                # standardized_own_profile_interests = [0]*(len(interests))
                 standardized_own_profile_gender[genders.index(own_profile.gender)] = 1
 
                 standardized_own_profile_interests = get_formatted_user_or_pageobject_interests(own_profile)
