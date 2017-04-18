@@ -207,7 +207,14 @@ class GetRecommendation_and_NeuralNetwork(TestCase):
 		self.assertTrue(0.0 < ProfileInterest.objects.get(profile=self.bob_the_artist_twin_profile, interest__name="Travel").level < 0.15)
 		# His interest for Craft is re-evaluated
 		self.assertTrue(1.0 > ProfileInterest.objects.get(profile=self.bob_the_artist_twin_profile, interest__name="Craft").level > 0.90)
-		
+	
+	def test_neo4j_connected(self):
+		client = Client()
+		response = client.post(self.uri_add_selectable+self.bob_the_socialaware_twin_profile.token+'/',
+		 content_type='application/json', data=page_one_objects(self.bob_the_socialaware_twin_auth, 0))
+		status = json.loads(response.content.decode('utf-8'))['inter']
+		self.assertNotEqual(status,'e_neo4j_Disconnected')
+	
 	def test_uu_test(self):
 		base = "http://localhost:8000"
 
