@@ -91,7 +91,6 @@ def get_suggestion(request, token):
         if own_profile and own_profile.activated and own_key == str(object_auth):
             try:
                 # Remove all the pageobjects who do not have a relation with a profile.
-                PageObject.objects.exclude(id__in = ProfilePageobject.objects.values_list('pageobject__id', flat=True)).delete()
                 # PageObjectIntere
                 # if Pa
                 # Get last visit of user
@@ -568,7 +567,7 @@ def handle_browsing_mistake(profile, base_uri):
                         last_object_visited_by_profile.pageobject.delete()
                     # Delete the Profilepageobject instance.
                     last_object_visited_by_profile.delete()
-    except PageObject.DoesNotExist:
+    except:
         # There is no existing block therefore we have no choice but to catch an exception
         "No object object to remove"
 

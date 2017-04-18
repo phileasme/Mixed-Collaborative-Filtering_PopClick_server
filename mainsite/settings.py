@@ -10,7 +10,11 @@ from neomodel import config as neoconfig
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+"""
+Do change the following as pleased, this specifies the connection to the neomodel
+"""
 # Required for the neo4j connection2
+#                               <user>:<password>@<host>:<port>
 neoconfig.DATABASE_URL = 'bolt://admin:totalrecall@localhost:7687'
 
 # Key used for the encryption

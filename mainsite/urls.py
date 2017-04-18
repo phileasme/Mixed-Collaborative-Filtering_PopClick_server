@@ -4,6 +4,7 @@
 """
 from django.conf.urls import include, url
 from django.contrib import admin
+# URL Patterns required to use the popclick application
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
     url(r'^popclick/',include('popclick.urls', namespace="popclick")),
