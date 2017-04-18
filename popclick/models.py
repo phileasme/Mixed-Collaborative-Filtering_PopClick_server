@@ -139,7 +139,7 @@ class Visit(models.Model):
         return self.page.href+" "+str(self.profile.id)+" "+str(self.counter)
 
 class ProfileInterest(models.Model):
-     """
+    """
         Expresses the interest levels of the profiles
     """
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)    

@@ -1,3 +1,9 @@
+""" 
+* ©Copyrights, all rights reserved at the exception of the used libraries.
+* @author: Phileas Hocquard 
+* File responsible for populating
+* Location : /mainsite/popclick/populating.py
+"""
 from .models import Interest, Visit, PageobjectInterest, Website, Page
 from .models import Profile, ProfileInterest, PageObject, ProfilePageobject, PageobjectLog 
 

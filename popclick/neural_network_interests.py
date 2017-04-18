@@ -34,7 +34,7 @@ class ArtificialNeuralNetwork():
         for iteration in range(iterations):
             # Forward propagation
             output = self.think(t_inputs)
-
+            # CREATE error difference
             error = np.subtract(t_outputs, output)
 
             # Applying Backpropagation

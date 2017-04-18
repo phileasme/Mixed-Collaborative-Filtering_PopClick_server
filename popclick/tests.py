@@ -2,7 +2,7 @@
 * ©Copyrights, all rights reserved at the exception of the used libraries.
 * @author: Phileas Hocquard 
 * Unit Testing File
-* Location : /mainsite/popclick/urls.py
+* Location : /mainsite/popclick/tests.py
 """
 from django.test import TestCase
 from popclick.models import *
