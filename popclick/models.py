@@ -18,11 +18,17 @@ import datetime
 from fernet_fields import EncryptedTextField
 
 class Interest(models.Model):
+    """
+        Interest class, shows the interests of the profiles, or pageobjects
+    """
     name = models.CharField(max_length=200, primary_key=True, unique=True)
     def __str__(self):
         return self.name
 
 class Profile(models.Model):
+    """
+        Profile class, represents the profile of the users
+    """
     age = models.IntegerField(default=0)
     token = models.CharField(unique=True, max_length=200)
     logtime = models.DateTimeField(auto_now=True)
@@ -35,12 +41,18 @@ class Profile(models.Model):
         return self.token
 
 class SecureAuth(models.Model):
+    """
+        SecureAuth class, encrypted keys by fernets algorithm
+    """
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     key = EncryptedTextField()
     def __str__(self):
         return self.key
 
 class Website(models.Model):
+    """
+        Website represents, the websites
+    """
     host = models.CharField(unique=True, max_length=2083)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -48,6 +60,9 @@ class Website(models.Model):
         return self.host
 
 class Page(models.Model):
+    """
+        Page class, a page which belongs to a website
+    """
     website = models.ForeignKey(Website, on_delete=models.CASCADE)
     path = models.CharField(max_length=2080)
     href = models.CharField(max_length=2083)
@@ -60,6 +75,9 @@ class Page(models.Model):
         return self.href
 
 class PageObject(models.Model):
+    """
+        Pageobject belongs to the pages
+    """
     selector = models.CharField(max_length=5000)
     href = models.CharField(max_length=2083)
     page = models.ForeignKey(Page, on_delete=models.CASCADE)
@@ -73,6 +91,9 @@ class PageObject(models.Model):
         return self.page.href+" "+self.text
 
 class PageobjectInterest(models.Model):
+    """
+        Expresses the interest levels of the pageobjects
+    """
     pageobject = models.ForeignKey(PageObject, on_delete=models.CASCADE)
     interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
     level = models.FloatField(default=1)
@@ -95,6 +116,9 @@ class ProfilePageobject(models.Model):
         return self.profile.token+" "+self.pageobject.text+" "+self.pageobject.href+" "+str(self.selections)
 
 class PageobjectLog(models.Model):
+    """
+        A log addressed to the profiles, for pagobjects encounters
+    """
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     pageobject = models.ForeignKey(PageObject, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -103,6 +127,9 @@ class PageobjectLog(models.Model):
         return str(self.updated_at)
 
 class Visit(models.Model):
+    """
+        A log addressed to the profile, page encounters
+    """
     page = models.ForeignKey(Page, on_delete=models.CASCADE)
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
     counter = models.IntegerField(default=0)
@@ -112,6 +139,9 @@ class Visit(models.Model):
         return self.page.href+" "+str(self.profile.id)+" "+str(self.counter)
 
 class ProfileInterest(models.Model):
+     """
+        Expresses the interest levels of the profiles
+    """
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)    
     interest = models.ForeignKey(Interest, on_delete=models.CASCADE)
     level = models.FloatField(default=1)
@@ -123,16 +153,25 @@ class ProfileInterest(models.Model):
         return self.profile.token+' '+self.interest.name+' '+str(self.level)
 
 class WebsiteN(StructuredNode):
+    """
+        Node representation of a Website
+    """
     host = StringProperty(unique_index=True, required=True)
     pages = RelationshipFrom('PageN', 'IS_FROM')
     profiles = RelationshipFrom('ProfileN', 'IS_FROM')
 
 class PageN(StructuredNode):
+    """
+        Node representation of a page
+    """
     href = StringProperty(unique_index=True, required=True)
     profiles = RelationshipFrom('ProfileN', 'IS_FROM')
     website = RelationshipTo(WebsiteN, 'BELONGS_TO')
 
 class ProfileN(StructuredNode):
+    """
+        Node representation of a profile
+    """
     token = StringProperty(unique_index=True, required=True)
     website = RelationshipTo(WebsiteN, 'HAS_A_WEBSITE')
     page = RelationshipTo(PageN, 'HAS_A_PAGE')

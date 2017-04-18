@@ -15,7 +15,7 @@ Do change the following as pleased, this specifies the connection to the neomode
 """
 # Required for the neo4j connection2
 #                               <user>:<password>@<host>:<port>
-neoconfig.DATABASE_URL = 'bolt://admin:totalrecall@localhost:7687'
+neoconfig.DATABASE_URL = 'bolt://neo4j:neo4j@localhost:7687'
 
 # Key used for the encryption
 FERNET_KEYS = [

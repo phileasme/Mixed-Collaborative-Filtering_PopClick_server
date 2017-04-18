@@ -73,6 +73,7 @@ def page_one_objects(auth, item):
 
 
 def made_up_profiles(item):
+	# A variety of fictional profiles
 	object_list =[{"logtime":"2017-02-10 10:00","age":"18","gender":"Male",
 			"interests":["Sports", "Travel", "Cars"], "signed":1},
 			{"logtime":"2017-02-10 10:00","age":"18","gender":"Male",
